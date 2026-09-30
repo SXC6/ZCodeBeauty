@@ -107,7 +107,7 @@ You can also just type `/beautify <image path>` in ZCode and let the agent do it
 |---|---|
 | `launch [--port N]` | Start ZCode with `--remote-debugging-port` (quit ZCode first) |
 | `apply <image> [--blur] [--dim] [--fit] [--no-monet]` | Set wallpaper + adapt colors (`--fit cover\|contain\|smart`) |
-| `colors` | Re-apply the stored theme without changing the image |
+| `colors [--port N] [--transparency <0-100>]` | Re-apply the stored theme; `--transparency` tunes overall UI translucency (50 = default) |
 | `serve [--detach] [--api-port M]` | Watch mode + settings panel + local control API (default API port 9223); `--detach` survives the shell that started it |
 | `watch` | Headless watch mode: re-inject whenever ZCode restarts |
 | `recovery [off\|on-start\|always]` | How the theme comes back after a restart (default `on-start`) |
@@ -121,7 +121,7 @@ You can also just type `/beautify <image path>` in ZCode and let the agent do it
 | Tool | Purpose |
 |---|---|
 | `set_background` | Set wallpaper + Monet colors |
-| `apply_options` | Tune blur/dim/monet/wallpaper visibility/framing without re-sending the image |
+| `apply_options` | Tune blur/dim/monet/wallpaper visibility/framing/UI translucency without re-sending the image |
 | `refresh_theme` | Re-inject the stored theme after a restart |
 | `reset_appearance` | Remove wallpaper and overrides |
 | `beautify_status` | Show the stored config |

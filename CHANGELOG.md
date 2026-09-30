@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.0
+
+One knob for the translucency of every UI surface.
+
+### Added
+
+- **`transparency` (0–100, default 50)** — a single dial that scales the
+  translucency of all surface classes (cards, panels/sidebar, inputs, popovers)
+  together: 50 is the shipped look, lower values make the UI more opaque, higher
+  values more glassy. Readability floors keep text areas legible at the extreme,
+  and with the wallpaper hidden everything stays opaque regardless. Exposed
+  everywhere:
+  - `apply_options` and `set_background` MCP tools;
+  - `colors --transparency <0-100>` on the CLI;
+  - an "界面透明" slider in the settings panel (persisted with the rest).
+
 ## v0.5.1
 
 - LICENSE now carries both copyright notices — the original author's

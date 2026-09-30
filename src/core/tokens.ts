@@ -17,10 +17,35 @@ export interface ThemeOptions {
   dim: number;
   /** Whether surface tokens should be translucent (wallpaper visible). */
   wallpaperVisible: boolean;
+  /** Overall UI translucency, 0-100; 50 is the shipped look. */
+  transparency: number;
 }
 
 const LIGHT_SURFACE_TONES = { lowest: 100, low: 96, container: 94, high: 92, highest: 90 };
 const DARK_SURFACE_TONES = { lowest: 4, low: 10, container: 12, high: 17, highest: 22 };
+
+// The shipped alphas and the readability floors for the transparency slider:
+// one knob scales every surface class, but text areas never go fully clear.
+const SHIPPED_ALPHA = { surface: 0.72, panel: 0.62, input: 0.5, popover: 0.92 };
+const ALPHA_FLOORS = { surface: 0.3, panel: 0.18, input: 0.2, popover: 0.6 };
+
+function clampTransparency(value: unknown): number {
+  const n = typeof value === "number" && Number.isFinite(value) ? value : 50;
+  return Math.max(0, Math.min(100, n));
+}
+
+/**
+ * Alphas for the four surface classes. 50 = shipped look; 0 = fully opaque;
+ * 100 = twice as glassy as shipped (bounded by the floors above). Without a
+ * visible wallpaper everything is opaque regardless of the knob.
+ */
+export function surfaceAlphas(opts: { wallpaperVisible: boolean; transparency: number }) {
+  if (!opts.wallpaperVisible) return { surface: 1, panel: 1, input: 1, popover: 1 };
+  const m = clampTransparency(opts.transparency) / 50;
+  const a = (k: keyof typeof SHIPPED_ALPHA) =>
+    Math.max(ALPHA_FLOORS[k], Math.min(1, 1 - (1 - SHIPPED_ALPHA[k]) * m));
+  return { surface: a("surface"), panel: a("panel"), input: a("input"), popover: a("popover") };
+}
 
 export function buildVariableOverrides(theme: Theme, opts: ThemeOptions): string {
   return `${rootBlock(theme, opts)}\n.dark{${tokenRows(theme, "dark", opts).join("")}}`;
@@ -32,32 +57,29 @@ export function buildVariableOverrides(theme: Theme, opts: ThemeOptions): string
  * Only background/surface/input tokens are set; foregrounds, accents and
  * borders stay native.
  */
-export function buildTransparencyOverrides(opts: { dim: number }): string {
+export function buildTransparencyOverrides(opts: { dim: number; transparency: number }): string {
   return `:root,:host{${transparencyRows("light", opts).join("")}}\n.dark{${transparencyRows("dark", opts).join("")}}`;
 }
 
 const LIGHT_SCRIM = "255,255,255";
 const DARK_SCRIM = "18,18,22";
 
-function transparencyRows(mode: "light" | "dark", opts: { dim: number }): string[] {
+function transparencyRows(mode: "light" | "dark", opts: { dim: number; transparency: number }): string[] {
   const rgb = mode === "light" ? LIGHT_SCRIM : DARK_SCRIM;
-  const baseAlpha = 0.72;
-  const panelAlpha = 0.62;
-  const inputAlpha = 0.5;
-  const popoverAlpha = 0.92;
+  const al = surfaceAlphas({ wallpaperVisible: true, transparency: opts.transparency });
   return [
     `--color-background:transparent;`,
-    `--color-background-alt:rgba(${rgb},${panelAlpha});`,
-    `--color-background-win-alt:rgba(${rgb},${panelAlpha});`,
-    `--color-panel:rgba(${rgb},${panelAlpha});`,
-    `--color-sidebar:rgba(${rgb},${panelAlpha});`,
-    `--color-surface:rgba(${rgb},${baseAlpha});`,
-    `--color-surface-hover:rgba(${rgb},${baseAlpha});`,
-    `--color-card:rgba(${rgb},${baseAlpha});`,
-    `--color-card-selected:rgba(${rgb},${Math.min(1, baseAlpha + 0.15)});`,
-    `--color-popover:rgba(${rgb},${popoverAlpha});`,
-    `--color-input:rgba(${rgb},${inputAlpha});`,
-    `--color-input-focused:rgba(${rgb},${Math.min(1, inputAlpha + 0.2)});`,
+    `--color-background-alt:rgba(${rgb},${al.panel});`,
+    `--color-background-win-alt:rgba(${rgb},${al.panel});`,
+    `--color-panel:rgba(${rgb},${al.panel});`,
+    `--color-sidebar:rgba(${rgb},${al.panel});`,
+    `--color-surface:rgba(${rgb},${al.surface});`,
+    `--color-surface-hover:rgba(${rgb},${al.surface});`,
+    `--color-card:rgba(${rgb},${al.surface});`,
+    `--color-card-selected:rgba(${rgb},${Math.min(1, al.surface + 0.15)});`,
+    `--color-popover:rgba(${rgb},${al.popover});`,
+    `--color-input:rgba(${rgb},${al.input});`,
+    `--color-input-focused:rgba(${rgb},${Math.min(1, al.input + 0.2)});`,
     opts.dim > 0 ? `--zcode-beautify-dim:${opts.dim / 100};` : "",
   ].filter(Boolean);
 }
@@ -73,10 +95,11 @@ function tokenRows(theme: Theme, mode: "light" | "dark", opts: ThemeOptions): st
   const A = (argb: number, alpha = 1) => argbToCss(argb, alpha);
 
   // Surface alpha: with a wallpaper we let it through; without one, opaque.
-  const baseAlpha = opts.wallpaperVisible ? 0.72 : 1;
-  const panelAlpha = opts.wallpaperVisible ? 0.62 : 1;
-  const inputAlpha = opts.wallpaperVisible ? 0.5 : 1;
-  const popoverAlpha = opts.wallpaperVisible ? 0.92 : 1;
+  const al = surfaceAlphas(opts);
+  const baseAlpha = al.surface;
+  const panelAlpha = al.panel;
+  const inputAlpha = al.input;
+  const popoverAlpha = al.popover;
 
   return [
     // Window & page backgrounds become transparent so the wallpaper layer shows.

@@ -96,6 +96,8 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '      <input type="range" id="zb-blur" min="0" max="30" step="1" value="0"></div>' +
     '    <div class="zb-row"><label title="背景压暗程度(百分比,越高越暗)"><span>背景压暗</span><span><span id="zb-dim-val">0</span>%</span></label>' +
     '      <input type="range" id="zb-dim" min="0" max="80" step="1" value="0"></div>' +
+    '    <div class="zb-row"><label title="界面整体透明程度:50 为默认,越低越不透明,越高越通透"><span>界面透明</span><span><span id="zb-trans-val">50</span></span></label>' +
+    '      <input type="range" id="zb-trans" min="0" max="100" step="1" value="50"></div>' +
     '    <div class="zb-row zb-toggles">' +
     '      <label title="根据壁纸自动生成 UI 配色;关闭则保留 ZCode 原生颜色"><input type="checkbox" id="zb-monet">UI 莫奈取色</label>' +
     '      <label title="显示或隐藏背景壁纸"><input type="checkbox" id="zb-vis">显示壁纸</label>' +
@@ -162,6 +164,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
       post('/api/config', {
         blur: Number($('zb-blur').value),
         dim: Number($('zb-dim').value),
+        transparency: Number($('zb-trans').value),
         monet: $('zb-monet').checked,
         wallpaperVisible: $('zb-vis').checked
       }, function (d) { status(d && d.windows > 0 ? '已应用 applied' : '已保存(ZCode 未连接)'); });
@@ -187,6 +190,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
     if (on) {
       $('zb-blur').value = 0; $('zb-blur-val').textContent = '0';
       $('zb-dim').value = 0; $('zb-dim-val').textContent = '0';
+      $('zb-trans').value = 50; $('zb-trans-val').textContent = '50';
       $('zb-monet').checked = false;
       $('zb-vis').checked = false;
       $('zb-fit').textContent = '背景填充: 未知';
@@ -206,6 +210,8 @@ export function buildPanelScript(apiPort: number, token: string): string {
         setOffline(false);
         $('zb-blur').value = c.blur; $('zb-blur-val').textContent = c.blur;
         $('zb-dim').value = c.dim; $('zb-dim-val').textContent = c.dim;
+        $('zb-trans').value = (typeof c.transparency === 'number' ? c.transparency : 50);
+        $('zb-trans-val').textContent = $('zb-trans').value;
         $('zb-monet').checked = !!c.monet;
         $('zb-vis').checked = !!c.wallpaperVisible;
         $('zb-fit') && applyFitLabel($('zb-fit'), c.fit || 'cover');
@@ -232,6 +238,9 @@ export function buildPanelScript(apiPort: number, token: string): string {
   });
   $('zb-dim').addEventListener('input', function () {
     $('zb-dim-val').textContent = this.value; preview(); pushConfig();
+  });
+  $('zb-trans').addEventListener('input', function () {
+    $('zb-trans-val').textContent = this.value; pushConfig();
   });
   $('zb-monet').addEventListener('change', pushConfig);
   $('zb-vis').addEventListener('change', pushConfig);

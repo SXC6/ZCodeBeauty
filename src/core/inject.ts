@@ -17,6 +17,8 @@ export interface BeautifyConfig {
   monet: boolean;
   wallpaperVisible: boolean;
   fit: WallpaperFit;
+  /** Overall UI surface translucency, 0-100; 50 is the shipped look. */
+  transparency: number;
 }
 
 export const DEFAULT_CONFIG: BeautifyConfig = {
@@ -26,6 +28,7 @@ export const DEFAULT_CONFIG: BeautifyConfig = {
   monet: true,
   wallpaperVisible: true,
   fit: "cover",
+  transparency: 50,
 };
 
 export interface BuiltPayload {
@@ -92,9 +95,10 @@ html, body { background: transparent !important; }
       parts.push(buildVariableOverrides(assets.theme, {
         dim: config.dim,
         wallpaperVisible: config.wallpaperVisible,
+        transparency: config.transparency,
       }));
     } else if (config.wallpaperVisible) {
-      parts.push(buildTransparencyOverrides({ dim: config.dim }));
+      parts.push(buildTransparencyOverrides({ dim: config.dim, transparency: config.transparency }));
     }
   }
   const wallpaperDataUri = config.wallpaperVisible ? assets?.dataUri : undefined;

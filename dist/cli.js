@@ -109672,6 +109672,17 @@ var init_monet = __esm({
 });
 
 // dist/core/tokens.js
+function clampTransparency(value) {
+  const n2 = typeof value === "number" && Number.isFinite(value) ? value : 50;
+  return Math.max(0, Math.min(100, n2));
+}
+function surfaceAlphas(opts) {
+  if (!opts.wallpaperVisible)
+    return { surface: 1, panel: 1, input: 1, popover: 1 };
+  const m = clampTransparency(opts.transparency) / 50;
+  const a2 = (k) => Math.max(ALPHA_FLOORS[k], Math.min(1, 1 - (1 - SHIPPED_ALPHA[k]) * m));
+  return { surface: a2("surface"), panel: a2("panel"), input: a2("input"), popover: a2("popover") };
+}
 function buildVariableOverrides(theme, opts) {
   return `${rootBlock(theme, opts)}
 .dark{${tokenRows(theme, "dark", opts).join("")}}`;
@@ -109682,23 +109693,20 @@ function buildTransparencyOverrides(opts) {
 }
 function transparencyRows(mode, opts) {
   const rgb = mode === "light" ? LIGHT_SCRIM : DARK_SCRIM;
-  const baseAlpha = 0.72;
-  const panelAlpha = 0.62;
-  const inputAlpha = 0.5;
-  const popoverAlpha = 0.92;
+  const al = surfaceAlphas({ wallpaperVisible: true, transparency: opts.transparency });
   return [
     `--color-background:transparent;`,
-    `--color-background-alt:rgba(${rgb},${panelAlpha});`,
-    `--color-background-win-alt:rgba(${rgb},${panelAlpha});`,
-    `--color-panel:rgba(${rgb},${panelAlpha});`,
-    `--color-sidebar:rgba(${rgb},${panelAlpha});`,
-    `--color-surface:rgba(${rgb},${baseAlpha});`,
-    `--color-surface-hover:rgba(${rgb},${baseAlpha});`,
-    `--color-card:rgba(${rgb},${baseAlpha});`,
-    `--color-card-selected:rgba(${rgb},${Math.min(1, baseAlpha + 0.15)});`,
-    `--color-popover:rgba(${rgb},${popoverAlpha});`,
-    `--color-input:rgba(${rgb},${inputAlpha});`,
-    `--color-input-focused:rgba(${rgb},${Math.min(1, inputAlpha + 0.2)});`,
+    `--color-background-alt:rgba(${rgb},${al.panel});`,
+    `--color-background-win-alt:rgba(${rgb},${al.panel});`,
+    `--color-panel:rgba(${rgb},${al.panel});`,
+    `--color-sidebar:rgba(${rgb},${al.panel});`,
+    `--color-surface:rgba(${rgb},${al.surface});`,
+    `--color-surface-hover:rgba(${rgb},${al.surface});`,
+    `--color-card:rgba(${rgb},${al.surface});`,
+    `--color-card-selected:rgba(${rgb},${Math.min(1, al.surface + 0.15)});`,
+    `--color-popover:rgba(${rgb},${al.popover});`,
+    `--color-input:rgba(${rgb},${al.input});`,
+    `--color-input-focused:rgba(${rgb},${Math.min(1, al.input + 0.2)});`,
     opts.dim > 0 ? `--zcode-beautify-dim:${opts.dim / 100};` : ""
   ].filter(Boolean);
 }
@@ -109710,10 +109718,11 @@ function tokenRows(theme, mode, opts) {
   const t2 = mode === "light" ? LIGHT_SURFACE_TONES : DARK_SURFACE_TONES;
   const n2 = theme.palettes.neutral;
   const A2 = (argb, alpha = 1) => argbToCss(argb, alpha);
-  const baseAlpha = opts.wallpaperVisible ? 0.72 : 1;
-  const panelAlpha = opts.wallpaperVisible ? 0.62 : 1;
-  const inputAlpha = opts.wallpaperVisible ? 0.5 : 1;
-  const popoverAlpha = opts.wallpaperVisible ? 0.92 : 1;
+  const al = surfaceAlphas(opts);
+  const baseAlpha = al.surface;
+  const panelAlpha = al.panel;
+  const inputAlpha = al.input;
+  const popoverAlpha = al.popover;
   return [
     // Window & page backgrounds become transparent so the wallpaper layer shows.
     `--color-background:transparent;`,
@@ -109752,13 +109761,15 @@ function tokenRows(theme, mode, opts) {
     opts.dim > 0 ? `--zcode-beautify-dim:${opts.dim / 100};` : ""
   ].filter(Boolean);
 }
-var LIGHT_SURFACE_TONES, DARK_SURFACE_TONES, LIGHT_SCRIM, DARK_SCRIM;
+var LIGHT_SURFACE_TONES, DARK_SURFACE_TONES, SHIPPED_ALPHA, ALPHA_FLOORS, LIGHT_SCRIM, DARK_SCRIM;
 var init_tokens = __esm({
   "dist/core/tokens.js"() {
     "use strict";
     init_monet();
     LIGHT_SURFACE_TONES = { lowest: 100, low: 96, container: 94, high: 92, highest: 90 };
     DARK_SURFACE_TONES = { lowest: 4, low: 10, container: 12, high: 17, highest: 22 };
+    SHIPPED_ALPHA = { surface: 0.72, panel: 0.62, input: 0.5, popover: 0.92 };
+    ALPHA_FLOORS = { surface: 0.3, panel: 0.18, input: 0.2, popover: 0.6 };
     LIGHT_SCRIM = "255,255,255";
     DARK_SCRIM = "18,18,22";
   }
@@ -109809,10 +109820,11 @@ html, body { background: transparent !important; }
     if (config.monet) {
       parts.push(buildVariableOverrides(assets.theme, {
         dim: config.dim,
-        wallpaperVisible: config.wallpaperVisible
+        wallpaperVisible: config.wallpaperVisible,
+        transparency: config.transparency
       }));
     } else if (config.wallpaperVisible) {
-      parts.push(buildTransparencyOverrides({ dim: config.dim }));
+      parts.push(buildTransparencyOverrides({ dim: config.dim, transparency: config.transparency }));
     }
   }
   const wallpaperDataUri = config.wallpaperVisible ? assets?.dataUri : void 0;
@@ -109868,7 +109880,8 @@ var init_inject = __esm({
       dim: 25,
       monet: true,
       wallpaperVisible: true,
-      fit: "cover"
+      fit: "cover",
+      transparency: 50
     };
   }
 });
@@ -110097,7 +110110,8 @@ async function applyWallpaper(imagePath, opts) {
     dim: opts.dim ?? stored.dim ?? DEFAULT_CONFIG.dim,
     monet: opts.monet ?? stored.monet ?? DEFAULT_CONFIG.monet,
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
-    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit
+    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
+    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency
   };
   fs4.mkdirSync(dataDir(), { recursive: true });
   const dest = path2.join(dataDir(), "wallpaper" + path2.extname(abs).toLowerCase());
@@ -110119,7 +110133,8 @@ async function applyColorsOnly(opts) {
     dim: opts.dim ?? stored.dim ?? DEFAULT_CONFIG.dim,
     monet: opts.monet ?? stored.monet ?? DEFAULT_CONFIG.monet,
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
-    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit
+    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
+    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency
   };
   saveConfig(config);
   return applyToZCode(config, await buildPayloadFromConfig(config));
@@ -110406,6 +110421,8 @@ function buildPanelScript(apiPort, token) {
     '      <input type="range" id="zb-blur" min="0" max="30" step="1" value="0"></div>' +
     '    <div class="zb-row"><label title="\u80CC\u666F\u538B\u6697\u7A0B\u5EA6(\u767E\u5206\u6BD4,\u8D8A\u9AD8\u8D8A\u6697)"><span>\u80CC\u666F\u538B\u6697</span><span><span id="zb-dim-val">0</span>%</span></label>' +
     '      <input type="range" id="zb-dim" min="0" max="80" step="1" value="0"></div>' +
+    '    <div class="zb-row"><label title="\u754C\u9762\u6574\u4F53\u900F\u660E\u7A0B\u5EA6:50 \u4E3A\u9ED8\u8BA4,\u8D8A\u4F4E\u8D8A\u4E0D\u900F\u660E,\u8D8A\u9AD8\u8D8A\u901A\u900F"><span>\u754C\u9762\u900F\u660E</span><span><span id="zb-trans-val">50</span></span></label>' +
+    '      <input type="range" id="zb-trans" min="0" max="100" step="1" value="50"></div>' +
     '    <div class="zb-row zb-toggles">' +
     '      <label title="\u6839\u636E\u58C1\u7EB8\u81EA\u52A8\u751F\u6210 UI \u914D\u8272;\u5173\u95ED\u5219\u4FDD\u7559 ZCode \u539F\u751F\u989C\u8272"><input type="checkbox" id="zb-monet">UI \u83AB\u5948\u53D6\u8272</label>' +
     '      <label title="\u663E\u793A\u6216\u9690\u85CF\u80CC\u666F\u58C1\u7EB8"><input type="checkbox" id="zb-vis">\u663E\u793A\u58C1\u7EB8</label>' +
@@ -110472,6 +110489,7 @@ function buildPanelScript(apiPort, token) {
       post('/api/config', {
         blur: Number($('zb-blur').value),
         dim: Number($('zb-dim').value),
+        transparency: Number($('zb-trans').value),
         monet: $('zb-monet').checked,
         wallpaperVisible: $('zb-vis').checked
       }, function (d) { status(d && d.windows > 0 ? '\u5DF2\u5E94\u7528 applied' : '\u5DF2\u4FDD\u5B58(ZCode \u672A\u8FDE\u63A5)'); });
@@ -110497,6 +110515,7 @@ function buildPanelScript(apiPort, token) {
     if (on) {
       $('zb-blur').value = 0; $('zb-blur-val').textContent = '0';
       $('zb-dim').value = 0; $('zb-dim-val').textContent = '0';
+      $('zb-trans').value = 50; $('zb-trans-val').textContent = '50';
       $('zb-monet').checked = false;
       $('zb-vis').checked = false;
       $('zb-fit').textContent = '\u80CC\u666F\u586B\u5145: \u672A\u77E5';
@@ -110516,6 +110535,8 @@ function buildPanelScript(apiPort, token) {
         setOffline(false);
         $('zb-blur').value = c.blur; $('zb-blur-val').textContent = c.blur;
         $('zb-dim').value = c.dim; $('zb-dim-val').textContent = c.dim;
+        $('zb-trans').value = (typeof c.transparency === 'number' ? c.transparency : 50);
+        $('zb-trans-val').textContent = $('zb-trans').value;
         $('zb-monet').checked = !!c.monet;
         $('zb-vis').checked = !!c.wallpaperVisible;
         $('zb-fit') && applyFitLabel($('zb-fit'), c.fit || 'cover');
@@ -110542,6 +110563,9 @@ function buildPanelScript(apiPort, token) {
   });
   $('zb-dim').addEventListener('input', function () {
     $('zb-dim-val').textContent = this.value; preview(); pushConfig();
+  });
+  $('zb-trans').addEventListener('input', function () {
+    $('zb-trans-val').textContent = this.value; pushConfig();
   });
   $('zb-monet').addEventListener('change', pushConfig);
   $('zb-vis').addEventListener('change', pushConfig);
@@ -110744,6 +110768,7 @@ function publicConfig(config) {
     monet: config.monet,
     wallpaperVisible: config.wallpaperVisible,
     fit: config.fit,
+    transparency: config.transparency,
     wallpaperSet: Boolean(config.wallpaperPath && fs7.existsSync(config.wallpaperPath)),
     hasBackup: hasBackup(),
     cdpPort: config.port
@@ -110759,6 +110784,9 @@ function sanitize(body) {
     out.monet = body.monet;
   if (typeof body?.wallpaperVisible === "boolean")
     out.wallpaperVisible = body.wallpaperVisible;
+  if (typeof body?.transparency === "number" && body.transparency >= 0 && body.transparency <= 100) {
+    out.transparency = body.transparency;
+  }
   if (body?.fit === "cover" || body?.fit === "contain" || body?.fit === "smart")
     out.fit = body.fit;
   return out;
@@ -111292,7 +111320,8 @@ Commands:
     --fit <mode>                 cover | contain | smart (default cover)
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
-  colors [--port N]              Re-apply stored theme without wallpaper change
+  colors [--port N] [--transparency <0-100>]
+                                 Re-apply stored theme; tune overall UI translucency (50 = default)
   reset [--port N]               Remove wallpaper and color overrides
   status [--port N]              Show CDP reachability and renderer targets
   watch [--port N]               Watch mode: re-inject whenever ZCode (re)starts
@@ -111365,8 +111394,18 @@ Quit ZCode completely (including any tray icon), then run \`zcode-beautify launc
         break;
       }
       case "colors": {
+        const rawTransparency = flag("--transparency");
+        let transparency;
+        if (rawTransparency !== void 0) {
+          transparency = Number(rawTransparency);
+          if (!Number.isFinite(transparency) || transparency < 0 || transparency > 100) {
+            console.error(`Invalid --transparency "${rawTransparency}". Use a number from 0 to 100 (50 = the shipped look).`);
+            process.exitCode = 1;
+            return;
+          }
+        }
         const { applyColorsOnly: applyColorsOnly2 } = await Promise.resolve().then(() => (init_session(), session_exports));
-        const windows = await applyColorsOnly2({ port });
+        const windows = await applyColorsOnly2({ port, transparency });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;
       }

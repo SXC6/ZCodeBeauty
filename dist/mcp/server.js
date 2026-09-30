@@ -144408,6 +144408,19 @@ function round2(v) {
 // dist/core/tokens.js
 var LIGHT_SURFACE_TONES = { lowest: 100, low: 96, container: 94, high: 92, highest: 90 };
 var DARK_SURFACE_TONES = { lowest: 4, low: 10, container: 12, high: 17, highest: 22 };
+var SHIPPED_ALPHA = { surface: 0.72, panel: 0.62, input: 0.5, popover: 0.92 };
+var ALPHA_FLOORS = { surface: 0.3, panel: 0.18, input: 0.2, popover: 0.6 };
+function clampTransparency(value) {
+  const n2 = typeof value === "number" && Number.isFinite(value) ? value : 50;
+  return Math.max(0, Math.min(100, n2));
+}
+function surfaceAlphas(opts) {
+  if (!opts.wallpaperVisible)
+    return { surface: 1, panel: 1, input: 1, popover: 1 };
+  const m = clampTransparency(opts.transparency) / 50;
+  const a2 = (k) => Math.max(ALPHA_FLOORS[k], Math.min(1, 1 - (1 - SHIPPED_ALPHA[k]) * m));
+  return { surface: a2("surface"), panel: a2("panel"), input: a2("input"), popover: a2("popover") };
+}
 function buildVariableOverrides(theme, opts) {
   return `${rootBlock(theme, opts)}
 .dark{${tokenRows(theme, "dark", opts).join("")}}`;
@@ -144420,23 +144433,20 @@ var LIGHT_SCRIM = "255,255,255";
 var DARK_SCRIM = "18,18,22";
 function transparencyRows(mode, opts) {
   const rgb = mode === "light" ? LIGHT_SCRIM : DARK_SCRIM;
-  const baseAlpha = 0.72;
-  const panelAlpha = 0.62;
-  const inputAlpha = 0.5;
-  const popoverAlpha = 0.92;
+  const al = surfaceAlphas({ wallpaperVisible: true, transparency: opts.transparency });
   return [
     `--color-background:transparent;`,
-    `--color-background-alt:rgba(${rgb},${panelAlpha});`,
-    `--color-background-win-alt:rgba(${rgb},${panelAlpha});`,
-    `--color-panel:rgba(${rgb},${panelAlpha});`,
-    `--color-sidebar:rgba(${rgb},${panelAlpha});`,
-    `--color-surface:rgba(${rgb},${baseAlpha});`,
-    `--color-surface-hover:rgba(${rgb},${baseAlpha});`,
-    `--color-card:rgba(${rgb},${baseAlpha});`,
-    `--color-card-selected:rgba(${rgb},${Math.min(1, baseAlpha + 0.15)});`,
-    `--color-popover:rgba(${rgb},${popoverAlpha});`,
-    `--color-input:rgba(${rgb},${inputAlpha});`,
-    `--color-input-focused:rgba(${rgb},${Math.min(1, inputAlpha + 0.2)});`,
+    `--color-background-alt:rgba(${rgb},${al.panel});`,
+    `--color-background-win-alt:rgba(${rgb},${al.panel});`,
+    `--color-panel:rgba(${rgb},${al.panel});`,
+    `--color-sidebar:rgba(${rgb},${al.panel});`,
+    `--color-surface:rgba(${rgb},${al.surface});`,
+    `--color-surface-hover:rgba(${rgb},${al.surface});`,
+    `--color-card:rgba(${rgb},${al.surface});`,
+    `--color-card-selected:rgba(${rgb},${Math.min(1, al.surface + 0.15)});`,
+    `--color-popover:rgba(${rgb},${al.popover});`,
+    `--color-input:rgba(${rgb},${al.input});`,
+    `--color-input-focused:rgba(${rgb},${Math.min(1, al.input + 0.2)});`,
     opts.dim > 0 ? `--zcode-beautify-dim:${opts.dim / 100};` : ""
   ].filter(Boolean);
 }
@@ -144448,10 +144458,11 @@ function tokenRows(theme, mode, opts) {
   const t2 = mode === "light" ? LIGHT_SURFACE_TONES : DARK_SURFACE_TONES;
   const n2 = theme.palettes.neutral;
   const A2 = (argb, alpha = 1) => argbToCss(argb, alpha);
-  const baseAlpha = opts.wallpaperVisible ? 0.72 : 1;
-  const panelAlpha = opts.wallpaperVisible ? 0.62 : 1;
-  const inputAlpha = opts.wallpaperVisible ? 0.5 : 1;
-  const popoverAlpha = opts.wallpaperVisible ? 0.92 : 1;
+  const al = surfaceAlphas(opts);
+  const baseAlpha = al.surface;
+  const panelAlpha = al.panel;
+  const inputAlpha = al.input;
+  const popoverAlpha = al.popover;
   return [
     // Window & page backgrounds become transparent so the wallpaper layer shows.
     `--color-background:transparent;`,
@@ -144498,7 +144509,8 @@ var DEFAULT_CONFIG = {
   dim: 25,
   monet: true,
   wallpaperVisible: true,
-  fit: "cover"
+  fit: "cover",
+  transparency: 50
 };
 function buildPayload(config2, assets) {
   const parts = [];
@@ -144544,10 +144556,11 @@ html, body { background: transparent !important; }
     if (config2.monet) {
       parts.push(buildVariableOverrides(assets.theme, {
         dim: config2.dim,
-        wallpaperVisible: config2.wallpaperVisible
+        wallpaperVisible: config2.wallpaperVisible,
+        transparency: config2.transparency
       }));
     } else if (config2.wallpaperVisible) {
-      parts.push(buildTransparencyOverrides({ dim: config2.dim }));
+      parts.push(buildTransparencyOverrides({ dim: config2.dim, transparency: config2.transparency }));
     }
   }
   const wallpaperDataUri = config2.wallpaperVisible ? assets?.dataUri : void 0;
@@ -144712,7 +144725,8 @@ async function applyWallpaper(imagePath, opts) {
     dim: opts.dim ?? stored.dim ?? DEFAULT_CONFIG.dim,
     monet: opts.monet ?? stored.monet ?? DEFAULT_CONFIG.monet,
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
-    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit
+    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
+    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency
   };
   fs4.mkdirSync(dataDir(), { recursive: true });
   const dest = path2.join(dataDir(), "wallpaper" + path2.extname(abs).toLowerCase());
@@ -144734,7 +144748,8 @@ async function applyColorsOnly(opts) {
     dim: opts.dim ?? stored.dim ?? DEFAULT_CONFIG.dim,
     monet: opts.monet ?? stored.monet ?? DEFAULT_CONFIG.monet,
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
-    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit
+    fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
+    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency
   };
   saveConfig(config2);
   return applyToZCode(config2, await buildPayloadFromConfig(config2));
@@ -145078,7 +145093,7 @@ async function repairLaunchers(opts) {
 // dist/mcp/server.js
 var server = new McpServer({
   name: "zcode-beautify",
-  version: "0.5.1"
+  version: "0.6.0"
 });
 server.registerTool("set_background", {
   title: "Set ZCode wallpaper",
@@ -145087,11 +145102,12 @@ server.registerTool("set_background", {
     image_path: external_exports.string().describe("Absolute path of the image to use as wallpaper"),
     blur: external_exports.number().min(0).max(100).optional().describe("Wallpaper blur radius in px (default 0)"),
     dim: external_exports.number().min(0).max(100).optional().describe("Wallpaper darkening 0-100 (default 25)"),
-    fit: external_exports.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point")
+    fit: external_exports.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point"),
+    transparency: external_exports.number().min(0).max(100).optional().describe("Overall UI surface translucency 0-100 (50 = the shipped look; lower = more opaque, higher = more see-through)")
   }
-}, async ({ image_path, blur, dim, fit }) => {
+}, async ({ image_path, blur, dim, fit, transparency }) => {
   try {
-    const { windows } = await applyWallpaper(image_path, { blur, dim, fit });
+    const { windows } = await applyWallpaper(image_path, { blur, dim, fit, transparency });
     return { content: [{ type: "text", text: `Wallpaper applied to ${windows} window(s) with Monet-adapted colors.` }] };
   } catch (err) {
     return { content: [{ type: "text", text: `Failed: ${err.message}` }], isError: true };
@@ -145105,11 +145121,12 @@ server.registerTool("apply_options", {
     dim: external_exports.number().min(0).max(100).optional().describe("Wallpaper darkening 0-100"),
     monet: external_exports.boolean().optional().describe("Regenerate UI colors from the wallpaper (true) or keep ZCode's original colors (false)"),
     wallpaper_visible: external_exports.boolean().optional().describe("Translucent surfaces showing the wallpaper (true) or opaque surfaces (false)"),
-    fit: external_exports.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point")
+    fit: external_exports.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point"),
+    transparency: external_exports.number().min(0).max(100).optional().describe("Overall UI surface translucency 0-100 (50 = the shipped look; lower = more opaque, higher = more see-through)")
   }
-}, async ({ blur, dim, monet, wallpaper_visible, fit }) => {
+}, async ({ blur, dim, monet, wallpaper_visible, fit, transparency }) => {
   try {
-    const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit });
+    const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency });
     return { content: [{ type: "text", text: `Appearance updated in ${windows} window(s).` }] };
   } catch (err) {
     return { content: [{ type: "text", text: `Failed: ${err.message}` }], isError: true };

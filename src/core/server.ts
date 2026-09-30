@@ -93,6 +93,7 @@ function publicConfig(config: BeautifyConfig) {
     monet: config.monet,
     wallpaperVisible: config.wallpaperVisible,
     fit: config.fit,
+    transparency: config.transparency,
     wallpaperSet: Boolean(config.wallpaperPath && fs.existsSync(config.wallpaperPath)),
     hasBackup: hasBackup(),
     cdpPort: config.port,
@@ -105,6 +106,9 @@ function sanitize(body: any): Partial<BeautifyConfig> {
   if (typeof body?.dim === "number" && body.dim >= 0 && body.dim <= 100) out.dim = body.dim;
   if (typeof body?.monet === "boolean") out.monet = body.monet;
   if (typeof body?.wallpaperVisible === "boolean") out.wallpaperVisible = body.wallpaperVisible;
+  if (typeof body?.transparency === "number" && body.transparency >= 0 && body.transparency <= 100) {
+    out.transparency = body.transparency;
+  }
   if (body?.fit === "cover" || body?.fit === "contain" || body?.fit === "smart") out.fit = body.fit;
   return out;
 }

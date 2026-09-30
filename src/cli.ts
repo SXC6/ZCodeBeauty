@@ -30,7 +30,8 @@ Commands:
     --fit <mode>                 cover | contain | smart (default cover)
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
-  colors [--port N]              Re-apply stored theme without wallpaper change
+  colors [--port N] [--transparency <0-100>]
+                                 Re-apply stored theme; tune overall UI translucency (50 = default)
   reset [--port N]               Remove wallpaper and color overrides
   status [--port N]              Show CDP reachability and renderer targets
   watch [--port N]               Watch mode: re-inject whenever ZCode (re)starts
@@ -110,8 +111,18 @@ async function main(): Promise<void> {
         break;
       }
       case "colors": {
+        const rawTransparency = flag("--transparency");
+        let transparency: number | undefined;
+        if (rawTransparency !== undefined) {
+          transparency = Number(rawTransparency);
+          if (!Number.isFinite(transparency) || transparency < 0 || transparency > 100) {
+            console.error(`Invalid --transparency "${rawTransparency}". Use a number from 0 to 100 (50 = the shipped look).`);
+            process.exitCode = 1;
+            return;
+          }
+        }
         const { applyColorsOnly } = await import("./core/session.js");
-        const windows = await applyColorsOnly({ port });
+        const windows = await applyColorsOnly({ port, transparency });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;
       }
