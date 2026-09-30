@@ -60,7 +60,14 @@ CLI is truly unreachable.
    No git? Download the release zip and unzip. The folder root carries
    `marketplace.json`, so the folder itself is the marketplace.
 
-2. **Locate the ZCode CLI.** The desktop app bundles it:
+2. **Ensure Node.js ≥ 20 is available** (`node --version`). The plugin's CLI,
+   its MCP server, and the ZCode plugin CLI all run on Node, and a fresh
+   machine often lacks it. If missing, install it first — e.g.
+   `winget install OpenJS.NodeJS.LTS`, or unzip the official Windows zip into
+   `%LOCALAPPDATA%\Programs\nodejs` and append that folder to the user PATH
+   (no administrator rights needed).
+
+3. **Locate the ZCode CLI.** The desktop app bundles it:
    - Windows: `<install dir>\resources\glm\zcode.cjs` — typical installs are
      `C:\Program Files\ZCode\` and `D:\Program Files\zcode\`; if the folder is
      not obvious, read the `UninstallString` of the `ZCode` entry under
@@ -68,7 +75,7 @@ CLI is truly unreachable.
      directory.
    - Run it with any Node.js ≥ 20 that is on PATH (`node "<path to zcode.cjs>" …`).
 
-3. **Add the marketplace and install** (quote every path):
+4. **Add the marketplace and install** (quote every path):
    ```bash
    node "<zcode.cjs>" plugins marketplace add "<clone folder>"
    node "<zcode.cjs>" plugins install zcode-beautify@zcode-beautify
@@ -78,7 +85,7 @@ CLI is truly unreachable.
    `skills: 1, commands: 1, mcp: 1`. If it shows up disabled, run
    `node "<zcode.cjs>" plugins enable zcode-beautify@zcode-beautify`.
 
-4. **Tell the user to fully restart ZCode** so the plugin loads, then continue
+5. **Tell the user to fully restart ZCode** so the plugin loads, then continue
    with **"After installation"** below.
 
 ### Fallback — hand-write the registration (only if the CLI is unavailable)

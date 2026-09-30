@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1
+
+- LICENSE now carries both copyright notices — the original author's
+  (Logocceai, required to be preserved by MIT) and the fork maintainer's
+  (SXC6). Manifest author metadata updated accordingly.
+- INSTALL-FOR-AI: the AI installer now checks for Node ≥ 20 first and installs
+  it when missing, before following the install routes.
+
 ## v0.5.0
 
 Root-cures the most common "the theme did not come back" report seen in the
