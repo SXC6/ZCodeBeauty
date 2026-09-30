@@ -1,0 +1,57 @@
+{
+  "name": "zcode-beautify",
+  "version": "0.5.0",
+  "description": "Open-source beautification plugin for the ZCode desktop client: custom wallpaper + Material Design 3 (Monet) dynamic theming via CDP injection, with a live settings panel.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Logocceai",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "zcode-beautify": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "bundle": "npm run build && node scripts/bundle.mjs",
+    "package": "node scripts/package.mjs"
+  },
+  "keywords": [
+    "zcode",
+    "zcode-plugin",
+    "theme",
+    "wallpaper",
+    "material-design-3",
+    "monet",
+    "dynamic-color",
+    "cdp"
+  ],
+  "files": [
+    "dist",
+    "commands",
+    "skills",
+    ".zcode-plugin",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@material/material-color-utilities": "^0.3.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "jimp": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "adm-zip": "^0.6.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.6.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SXC6/ZCodeBeauty.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SXC6/ZCodeBeauty/issues"
+  },
+  "homepage": "https://github.com/SXC6/ZCodeBeauty#readme"
+}

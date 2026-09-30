@@ -1,0 +1,24 @@
+{
+  "name": "zcode-beautify",
+  "version": "0.5.0",
+  "description": "Beautify the ZCode desktop client: import a background wallpaper and adapt the UI colors with Material Design 3 (Monet) dynamic color.",
+  "author": {
+    "name": "Logocceai"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/SXC6/ZCodeBeauty",
+  "commands": "commands",
+  "skills": "skills",
+  "mcpServers": {
+    "zcode-beautify": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"
+      ],
+      "env": {
+        "ZCODE_BEAUTIFY_DATA_DIR": "${ZCODE_PLUGIN_DATA}"
+      }
+    }
+  },
+  "category": "themes"
+}

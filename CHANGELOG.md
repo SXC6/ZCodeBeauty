@@ -1,0 +1,187 @@
+# Changelog
+
+## v0.5.0
+
+Root-cures the most common "the theme did not come back" report seen in the
+field, and rewrites the AI installer instructions around the official CLI.
+
+### Added
+
+- **`repair-launchers` now guarantees a working entry.** Machine-wide shortcuts
+  (Public Desktop, ProgramData Start Menu) need elevation and stay unfixable —
+  and in the field they are what users actually click. When no per-user
+  shortcut (Desktop, Start Menu, pinned taskbar) carries the debug flag after
+  the scan, the repair resolves the ZCode executable through the registry and
+  creates `ZCode (Beautified).lnk` on the Desktop with the flag. Starting the
+  app from it always opens the CDP port.
+- Sample 4K wallpaper under `samples/`.
+
+### Changed
+
+- **INSTALL-FOR-AI Route B now installs through the official `zcode plugins`
+  CLI** (`plugins marketplace add` + `plugins install`). Hand-writing the
+  registration JSON failed in the field: ZCode 3.14.4 silently ignores records
+  missing `source` / `cacheTransactionId`. The JSON route remains documented as
+  a fallback with the corrected record shape.
+- Repository moved to SXC6/ZCodeBeauty (manifest and package metadata updated);
+  the plugin identity and MIT license are unchanged. Based on the original
+  work by Logocceai.
+
+### Fixed
+
+- The settings panel's image picker and `/api/wallpaper` now reject WebP up
+  front with a clear message — the bundled decoder cannot read it, and the
+  failure previously surfaced only after the file was saved.
+
+## v0.4.0
+
+Finds the ZCode executable on non-default install locations, and hardens the
+`apply` front door.
+
+### Added
+
+- **Registry-based ZCode lookup.** `findZcodeExecutable()` only knew
+  `C:\Program Files\ZCode` and the per-user Programs directory, so on installs
+  to another drive (`D:\Program Files\zcode`, for example) `launch` failed with
+  "ZCode executable not found" even though the app was right there. The static
+  candidates are now a fallback: when none exists, the Windows registry is
+  queried (App Paths under HKLM/HKCU/WOW6432Node, plus Uninstall entries with a
+  ZCode display name, deriving the install directory from `InstallLocation`,
+  `UninstallString` or `DisplayIcon` — the NSIS entry often lacks
+  `InstallLocation`). The first path that really exists wins.
+- `set_background` accepts an optional `fit` (`cover` / `contain` / `smart`),
+  matching what the CLI's `--fit` and `apply_options` already offered.
+- Image decode failures name the supported formats instead of surfacing jimp's
+  raw decoder error.
+
+### Fixed
+
+- `apply --dim 30 pic.jpg` treated `30` as the image path: the positional
+  argument scan skipped flag *names* but not their *values*. Flag values are
+  now skipped, so the option order no longer matters.
+- `apply --fit bogus` was stored verbatim and silently rendered as `cover`.
+  It is now rejected up front with the valid values.
+
+## v0.3.3
+
+The plugin now keeps the debug port alive across ZCode updates by itself, and
+covers one more class of launch entry.
+
+### Added
+
+- **Startup launcher check.** When ZCode starts without the debug port — the
+  failure mode after every app update, because the updater rebuilds the Start
+  Menu shortcut without the flag — the MCP host repairs the launch entries as
+  soon as it has confirmed the port is unreachable, so the *next* start is
+  clean. Same repair as `repair-launchers`, no resident cost, and nothing runs
+  while the port is reachable. This matters most for third-party launchers
+  (Flow Launcher, PowerToys Run, …): they index the Start Menu shortcut and
+  start it through ShellExecute, so the flag on that shortcut is what makes
+  them work.
+- Pinned taskbar shortcuts (`…\Quick Launch\User Pinned\TaskBar`) are scanned
+  and repaired like the other per-user shortcuts.
+
+### Changed
+
+- `status` explains the likely cause — and the fix — when the CDP port is
+  unreachable, instead of only reporting the error.
+- README and INSTALL-FOR-AI document which entries ZCode itself resets: the
+  updater rebuilds the Start Menu shortcut without the flag, and the app
+  re-registers its protocol and context-menu registry handlers on every start.
+  Shortcuts are the durable entries.
+
+## v0.3.2
+
+Stops the resident service from flashing a black console window on Windows.
+
+### Fixed
+
+- The process probe in `isZcodeProcessRunning()` ran `tasklist` without hiding
+  the child console. The probe runs inside the detached `serve` daemon, which has
+  no console of its own, so Windows allocated a fresh one on every call — and
+  Windows 11 hands a new console to Windows Terminal. The result was a window
+  titled `C:\WINDOWS\system32\tasklist.exe` appearing and vanishing every ~15
+  seconds whenever the probe fired, i.e. whenever ZCode was not running, for as
+  long as the daemon stayed alive. `tasklist`, `taskkill` and the PowerShell
+  launcher-repair call are now spawned with `windowsHide: true`, which is what
+  the launcher spawn and the daemon's own `spawn` already did.
+
+## v0.3.1
+
+Fixes the autostart entry behind recovery mode `always` on Windows. The script
+it wrote was not valid VBScript, so Windows Script Host never ran it: the entry
+was present and enabled, yet the resident service never started and the theme
+was gone after every reboot.
+
+### Fixed
+
+- `autostart install` (and selecting `always`) assembled the command line out of
+  separately quoted fragments, leaving everything after the first path outside a
+  string literal — a parse error, not a concatenation. The whole command is now
+  one VBScript string literal, with the paths quoted for Windows inside it.
+  Re-run `zcode-beautify autostart install` (or re-select `always` in the
+  settings panel) to rewrite an existing entry; it only matters from the next
+  sign-in, since a running service keeps working either way.
+
+## v0.3.0
+
+The theme now restores itself. This release fixes the "the plugin stopped
+working" report that followed every ZCode restart, and closes a security gap in
+the local control API.
+
+### Added
+
+- **Recovery modes** (`recovery_status`, `set_recovery_mode`). The injected
+  theme dies with the renderer on every restart, so something has to put it
+  back. Three modes, chosen by the user:
+  - `on-start` (default) — the MCP host ZCode spawns at startup restores it
+    once. No resident process, no settings panel.
+  - `always` — registers an autostart entry for the resident `serve` daemon, so
+    both the theme and the settings panel survive a reboot. Costs a background
+    node process (~60 MB, ~0.3% of one core).
+  - `off` — nothing automatic.
+  The settings panel carries a picker with the same three options and a
+  plain-language note about what each costs.
+- **`repair-launchers`** — scans desktop and Start Menu shortcuts, the
+  `zcode://` protocol handler and the Explorer context-menu verbs, and appends
+  the missing `--remote-debugging-port`. ZCode cannot open the port on its own:
+  the flag has to come from whatever launches it, and a machine typically has
+  several launch entries with only some of them carrying it.
+- The settings panel now reports when ZCode is running with its debug port
+  closed — the one case no background process can fix — and offers a button
+  that restarts the app properly.
+
+### Fixed
+
+- The CLI and the plugin host wrote **two different `config.json` files**: the
+  CLI fell back to `plugins/data/zcode-beautify/` while the host points
+  `ZCODE_BEAUTIFY_DATA_DIR` at the `…@zcode-beautify` form it derives from
+  `${ZCODE_PLUGIN_DATA}`. Settings changed through one path were invisible to
+  the other. They now resolve to the same directory.
+- The control API answered any request that could reach localhost, including
+  from any web page open in a local browser, and could replace the wallpaper or
+  reset the appearance. It now requires a token that only the injected panel
+  carries; `/api/health` stays open since it exposes nothing but the service
+  identity.
+- `holdSession` leaked its WebSocket when a step after the connect failed, and
+  held sessions were never dropped while CDP was unreachable. Both accumulated
+  connections over long runs.
+- The MCP server reported a hard-coded version that had drifted from the
+  manifest. It is now injected at bundle time from `package.json`.
+
+## v0.2.1
+
+- The settings panel is honest when `serve` is not running: an explicit offline
+  banner, zeroed and non-interactive controls, and a retry button, instead of
+  rendering plausible-looking defaults it never read.
+- `serve --detach` backgrounds the service so the panel outlives the shell that
+  started it; a second `serve` refuses to start and names the pid that already
+  owns the port.
+- `/api/health` identifies the service and its pid.
+
+## v0.2.0
+
+- Settings panel with live tuning (blur, dim, Monet colors, wallpaper
+  visibility, framing), wallpaper import, and reset/restore.
+- `/beautify` slash command and MCP tools.
+- Platform-agnostic skill pack for beautifying any Electron app over CDP.
