@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.7.3
+
+Palette polish: more presets, a reachable 1% strength, and theme-following
+chrome.
+
+### Fixed
+
+- **Touching the hue slider after a quick pick jumped the color.** The swatch
+  click updated the SV square, knob, readout and RGB fields but left the hue
+  slider's thumb at its stale position; the next touch of the slider then
+  started from that old hue (a pink pick turned red-orange). Every apply now
+  syncs the hue slider too.
+- **The strength slider stopped at 2-4% when dragged to the far left.** Values
+  below 1 used to be rejected with a snap-back to the last valid value, so a
+  fast drag's final 0-event stuck the thumb mid-track. Below-1 now clamps to
+  1% — a 0% overlay remains impossible, and the far-left drag lands on 1%.
+
+### Added
+
+- **Sixteen quick color picks** (was ten): white/black/gray/dark-gray, red,
+  orange, yellow/gold, green/dark-green, cyan, blue/dark-blue, purple, magenta,
+  pink.
+- **The panel follows ZCode's light/dark theme.** All chrome colors are CSS
+  variables switched by ZCode's own `html.theme-zai-light` / `-dark` class, so
+  flipping the app theme flips the panel (and palette) with it — no restart.
+
 ## v0.7.2
 
 The palette grows quick picks, an adjustable overlay strength, and manual RGB

@@ -26,17 +26,31 @@ export function buildPanelScript(apiPort: number, token: string): string {
 
   var css = [
     '#zcode-beautify-panel-root, #zcode-beautify-panel-root * { box-sizing: border-box; font-family: system-ui, sans-serif; }',
-    '#zcode-beautify-panel-root { position: fixed; inset: auto; z-index: 2147483647; font-size: 12px; color: #e8e8ea; }',
+    // The chrome follows ZCode's own light/dark switch (html.theme-zai-light
+    // / -dark): every color is a variable, only the two blocks below differ.
+    '#zcode-beautify-panel-root {',
+      ' --zb-text: #e8e8ea; --zb-bg: rgba(24,24,30,.88); --zb-bg-solid: rgba(24,24,30,.97);',
+      ' --zb-fab-bg: rgba(32,32,38,.78); --zb-fab-hover: rgba(52,52,60,.85);',
+      ' --zb-btn-bg: rgba(255,255,255,.09); --zb-btn-hover: rgba(255,255,255,.16);',
+      ' --zb-input-bg: rgba(255,255,255,.08); --zb-code-bg: rgba(0,0,0,.35);',
+      ' --zb-line: rgba(255,255,255,.13); --zb-line-soft: rgba(255,255,255,.1); }',
+    'html.theme-zai-light #zcode-beautify-panel-root {',
+      ' --zb-text: #24292f; --zb-bg: rgba(255,255,255,.9); --zb-bg-solid: rgba(255,255,255,.98);',
+      ' --zb-fab-bg: rgba(255,255,255,.85); --zb-fab-hover: rgba(238,238,244,.95);',
+      ' --zb-btn-bg: rgba(0,0,0,.06); --zb-btn-hover: rgba(0,0,0,.12);',
+      ' --zb-input-bg: rgba(0,0,0,.05); --zb-code-bg: rgba(0,0,0,.08);',
+      ' --zb-line: rgba(0,0,0,.16); --zb-line-soft: rgba(0,0,0,.12); }',
+    '#zcode-beautify-panel-root { position: fixed; inset: auto; z-index: 2147483647; font-size: 12px; color: var(--zb-text); }',
     '#zb-fab { position: fixed; right: 18px; bottom: 18px; width: 34px; height: 34px; border-radius: 50%;',
-      ' background: rgba(32,32,38,.78); border: 1px solid rgba(255,255,255,.12); cursor: pointer;',
+      ' background: var(--zb-fab-bg); border: 1px solid var(--zb-line); cursor: pointer;',
       ' display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);',
       ' box-shadow: 0 2px 12px rgba(0,0,0,.35); user-select: none; font-size: 15px; line-height: 1; }',
-    '#zb-fab:hover { background: rgba(52,52,60,.85); }',
+    '#zb-fab:hover { background: var(--zb-fab-hover); }',
     '#zb-panel { position: fixed; right: 18px; bottom: 60px; width: 264px; padding: 0 0 10px;',
-      ' background: rgba(24,24,30,.88); border: 1px solid rgba(255,255,255,.12); border-radius: 12px;',
+      ' background: var(--zb-bg); border: 1px solid var(--zb-line); border-radius: 12px;',
       ' backdrop-filter: blur(16px); box-shadow: 0 8px 32px rgba(0,0,0,.45); user-select: none; }',
     '#zb-panel[hidden] { display: none; }',
-    '#zb-head { padding: 9px 12px; font-weight: 600; cursor: move; border-bottom: 1px solid rgba(255,255,255,.1);',
+    '#zb-head { padding: 9px 12px; font-weight: 600; cursor: move; border-bottom: 1px solid var(--zb-line-soft);',
       ' display: flex; justify-content: space-between; align-items: center; }',
     '#zb-close { cursor: pointer; opacity: .7; padding: 0 4px; } #zb-close:hover { opacity: 1; }',
     '#zb-body { padding: 10px 12px 0; }',
@@ -57,7 +71,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
     // click or wheel tick and cannot be positioned, so the picker is DOM of our
     // own — docked left of the panel, outside it, never overlapping.
     '#zb-palette { position: absolute; z-index: 3; width: 190px; padding: 10px;',
-      ' background: rgba(24,24,30,.97); border: 1px solid rgba(255,255,255,.16); border-radius: 10px;',
+      ' background: var(--zb-bg-solid); border: 1px solid var(--zb-line); border-radius: 10px;',
       ' box-shadow: 0 8px 32px rgba(0,0,0,.5); }',
     '#zb-palette[hidden] { display: none; }',
     '#zb-sv { position: relative; height: 110px; border-radius: 6px; cursor: crosshair; overflow: hidden;',
@@ -67,19 +81,19 @@ export function buildPanelScript(apiPort: number, token: string): string {
       ' box-shadow: 0 0 4px rgba(0,0,0,.6); transform: translate(-50%, 50%); pointer-events: none; }',
     '#zb-hue { width: 100%; margin: 8px 0 0; height: 14px; border-radius: 7px; cursor: pointer; appearance: none;',
       ' background-image: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);',
-      ' border: 1px solid rgba(255,255,255,.2); }',
+      ' border: 1px solid var(--zb-line); }',
     '#zb-hue::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff;',
       ' border: 2px solid rgba(0,0,0,.35); box-shadow: 0 0 4px rgba(0,0,0,.4); }',
     '.zb-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }',
     '.zb-sw { width: 16px; height: 16px; border-radius: 4px; cursor: pointer; padding: 0;',
-      ' border: 1px solid rgba(255,255,255,.25); appearance: none; }',
+      ' border: 1px solid var(--zb-line); appearance: none; }',
     '.zb-sw:hover { transform: scale(1.15); }',
     '.zb-rgb { display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 10px; opacity: .85; }',
     '.zb-rgb input { width: 40px; min-width: 0; padding: 2px 3px; font-size: 11px; color: inherit; border-radius: 4px;',
-      ' background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); }',
+      ' background: var(--zb-input-bg); border: 1px solid var(--zb-line); }',
     '.zb-rgb input::-webkit-inner-spin-button, .zb-rgb input::-webkit-outer-spin-button { appearance: none; margin: 0; }',
     '#zb-pal-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }',
-    '#zb-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); flex: none; }',
+    '#zb-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--zb-line); flex: none; }',
     '#zb-pal-val { opacity: .85; white-space: nowrap; }',
     '#zb-strength-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }',
     '#zb-strength { flex: 1; margin: 0; height: 14px; min-width: 0; cursor: pointer; accent-color: #7aa2f7; }',
@@ -87,13 +101,13 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '.zb-pal-actions { display: flex; gap: 8px; margin-top: 9px; }',
     '.zb-pal-actions .zb-btn { flex: 1; padding: 5px 0; font-size: 11px; appearance: none; }',
     '.zb-btn { display: inline-block; padding: 6px 20px; text-align: center; border-radius: 999px; cursor: pointer;',
-      ' background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.14); color: inherit; font-size: 12px; }',
-    '.zb-btn:hover { background: rgba(255,255,255,.16); }',
+      ' background: var(--zb-btn-bg); border: 1px solid var(--zb-line); color: inherit; font-size: 12px; }',
+    '.zb-btn:hover { background: var(--zb-btn-hover); }',
     '#zb-status { min-height: 14px; padding: 2px 12px 0; opacity: .6; font-size: 11px; }',
     '#zb-offline { display: flex; flex-direction: column; gap: 6px; align-items: center;',
       ' padding: 10px 12px; background: rgba(120,53,15,.55); font-size: 11px; line-height: 1.5; text-align: center; }',
     '#zb-offline[hidden] { display: none; }',
-    '#zb-offline code { background: rgba(0,0,0,.35); padding: 1px 4px; border-radius: 4px;',
+    '#zb-offline code { background: var(--zb-code-bg); padding: 1px 4px; border-radius: 4px;',
       ' font-size: 10px; user-select: text; }',
     '#zb-offline .zb-hint { opacity: .85; }',
     // While offline the controls hold nothing we could read, so they must not
@@ -106,7 +120,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
       ' padding: 10px 12px; background: rgba(120,53,15,.45); font-size: 11px; line-height: 1.5; text-align: center; }',
     '#zb-needs-relaunch[hidden] { display: none; }',
     '#zb-recovery { width: 100%; padding: 4px 6px; border-radius: 6px; font-size: 11px; color: inherit;',
-      ' background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); }',
+      ' background: var(--zb-input-bg); border: 1px solid var(--zb-line); }',
     '#zb-recovery option { color: #111; }',
     '#zb-recovery-hint { margin-top: 4px; opacity: .65; font-size: 10px; line-height: 1.45; }'
   ].join('');
@@ -165,14 +179,20 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '    <div class="zb-swatches">' +
     '      <button class="zb-sw" data-c="#ffffff" title="白" style="background:#ffffff"></button>' +
     '      <button class="zb-sw" data-c="#000000" title="黑" style="background:#000000"></button>' +
+    '      <button class="zb-sw" data-c="#8c8c8c" title="灰" style="background:#8c8c8c"></button>' +
+    '      <button class="zb-sw" data-c="#434343" title="深灰" style="background:#434343"></button>' +
     '      <button class="zb-sw" data-c="#ff4d4f" title="红" style="background:#ff4d4f"></button>' +
     '      <button class="zb-sw" data-c="#ff7a45" title="橙" style="background:#ff7a45"></button>' +
     '      <button class="zb-sw" data-c="#fadb14" title="黄" style="background:#fadb14"></button>' +
+    '      <button class="zb-sw" data-c="#d4b106" title="金" style="background:#d4b106"></button>' +
     '      <button class="zb-sw" data-c="#52c41a" title="绿" style="background:#52c41a"></button>' +
+    '      <button class="zb-sw" data-c="#389e0d" title="深绿" style="background:#389e0d"></button>' +
     '      <button class="zb-sw" data-c="#13c2c2" title="青" style="background:#13c2c2"></button>' +
     '      <button class="zb-sw" data-c="#1890ff" title="蓝" style="background:#1890ff"></button>' +
+    '      <button class="zb-sw" data-c="#0050b3" title="深蓝" style="background:#0050b3"></button>' +
     '      <button class="zb-sw" data-c="#722ed1" title="紫" style="background:#722ed1"></button>' +
-    '      <button class="zb-sw" data-c="#eb2f96" title="粉" style="background:#eb2f96"></button>' +
+    '      <button class="zb-sw" data-c="#eb2f96" title="品红" style="background:#eb2f96"></button>' +
+    '      <button class="zb-sw" data-c="#ffb8c6" title="粉" style="background:#ffb8c6"></button>' +
     '    </div>' +
     '    <div class="zb-rgb">' +
     '      <span>R</span><input type="number" id="zb-r" min="0" max="255" step="1">' +
@@ -405,6 +425,11 @@ export function buildPanelScript(apiPort: number, token: string): string {
     $('zb-sv').style.backgroundColor = 'hsl(' + Math.round(palH) + ',100%,50%)';
     $('zb-sv-knob').style.left = (palS * 100) + '%';
     $('zb-sv-knob').style.bottom = (palV * 100) + '%';
+    // Keep the hue slider on the same hue as everything else: a swatch click
+    // used to leave the thumb at its stale position, and the next touch of
+    // the slider jumped the color from the thumb's old hue (pink chip →
+    // red-orange) instead of fine-tuning the picked one.
+    $('zb-hue').value = Math.round(palH);
     var rgb = hexToRgb(hex);
     $('zb-r').value = rgb[0];
     $('zb-g').value = rgb[1];
@@ -500,17 +525,19 @@ export function buildPanelScript(apiPort: number, token: string): string {
   $('zb-r').addEventListener('input', rgbInput);
   $('zb-g').addEventListener('input', rgbInput);
   $('zb-b').addEventListener('input', rgbInput);
-  // The strength control never sets 0 (or below): 0% is the "no overlay"
-  // state, reachable only through 重置 / right-click. Dragging up from the
-  // seeded 0 applies the shown color at the new strength.
+  // The strength control never applies 0% (or below): "no overlay" lives in
+  // the 重置 / right-click toggle, not in a strength. Values below 1 clamp to
+  // 1 instead of snapping back — a fast drag to the far left must land on 1%,
+  // not stick wherever the last ≥1 event happened (the old reject-and-revert
+  // behavior read as "the slider stops at 2-4%").
   $('zb-strength').addEventListener('input', function () {
     var v = Math.round(Number(this.value));
-    if (!(v >= 1)) {
+    if (!Number.isFinite(v)) {
       this.value = palOn ? palStrength : 0;
       return;
     }
     palOn = true;
-    palStrength = Math.min(100, v);
+    palStrength = Math.min(100, Math.max(1, v));
     palApply(true);
   });
   $('zb-pal-reset').addEventListener('click', function () {
