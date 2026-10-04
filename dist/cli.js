@@ -110572,12 +110572,20 @@ function buildPanelScript(apiPort, token) {
       .then(function (r) { return r.json(); })
       .then(function (c) {
         setOffline(false);
-        $('zb-blur').value = c.blur; $('zb-blur-val').textContent = c.blur;
-        $('zb-dim').value = c.dim; $('zb-dim-val').textContent = c.dim;
-        $('zb-trans').value = (typeof c.transparency === 'number' ? c.transparency : 50);
-        $('zb-trans-val').textContent = $('zb-trans').value;
-        $('zb-monet').checked = !!c.monet;
-        $('zb-vis').checked = !!c.wallpaperVisible;
+        // While the user is on a control (dragging a slider, toggling a box),
+        // the 4s poll must not yank it back to the stored value \u2014 that made
+        // the picture visibly jump between display states mid-drag.
+        var applyVal = function (slider, label, v) {
+          var el = $(slider);
+          if (!el || document.activeElement === el) return;
+          el.value = v;
+          $(label).textContent = v;
+        };
+        applyVal('zb-blur', 'zb-blur-val', c.blur);
+        applyVal('zb-dim', 'zb-dim-val', c.dim);
+        applyVal('zb-trans', 'zb-trans-val', (typeof c.transparency === 'number' ? c.transparency : 50));
+        var m = $('zb-monet'); if (m && document.activeElement !== m) m.checked = !!c.monet;
+        var v = $('zb-vis'); if (v && document.activeElement !== v) v.checked = !!c.wallpaperVisible;
         $('zb-fit') && applyFitLabel($('zb-fit'), c.fit || 'cover');
         var resetBtn = $('zb-reset');
         if (c.wallpaperSet) {
@@ -110705,9 +110713,14 @@ function buildPanelScript(apiPort, token) {
     var p = $('zb-panel');
     p.hidden = !p.hidden;
     if (!p.hidden) {
-      refresh();
-      refreshStatus();
-      beat(true);
+      // A panel dragged or stranded outside the viewport (window got resized
+      // after a drag) reads as a dead button: opening it re-anchors the panel
+      // whenever it is out of view.
+      var pr = p.getBoundingClientRect();
+      if (pr.left > innerWidth - 60 || pr.top > innerHeight - 60 || pr.right < 60 || pr.bottom < 60) {
+        p.style.left = ''; p.style.top = ''; p.style.right = '18px'; p.style.bottom = '60px';
+      }
+      refresh(); refreshStatus(); beat(true);
     } else if (root.getAttribute('data-offline') !== '1') {
       beat(false);
     }
@@ -111359,8 +111372,9 @@ Commands:
     --fit <mode>                 cover | contain | smart (default cover)
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
-  colors [--port N] [--transparency <0-100>]
-                                 Re-apply stored theme; tune overall UI translucency (50 = default)
+  colors [--port N] [--blur <px>] [--dim <0-100>] [--transparency <0-100>]
+         [--fit cover|contain|smart] [--no-monet]
+                                 Re-apply stored theme and/or retune the look
   reset [--port N]               Remove wallpaper and color overrides
   status [--port N]              Show CDP reachability and renderer targets
   watch [--port N]               Watch mode: re-inject whenever ZCode (re)starts
@@ -111443,8 +111457,23 @@ Quit ZCode completely (including any tray icon), then run \`zcode-beautify launc
             return;
           }
         }
+        const rawBlur = flag("--blur");
+        const rawDim = flag("--dim");
+        const fit = flag("--fit");
+        if (fit && !["cover", "contain", "smart"].includes(fit)) {
+          console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
+          process.exitCode = 1;
+          return;
+        }
         const { applyColorsOnly: applyColorsOnly2 } = await Promise.resolve().then(() => (init_session(), session_exports));
-        const windows = await applyColorsOnly2({ port, transparency });
+        const windows = await applyColorsOnly2({
+          port,
+          transparency,
+          blur: rawBlur !== void 0 ? Number(rawBlur) : void 0,
+          dim: rawDim !== void 0 ? Number(rawDim) : void 0,
+          monet: has("--no-monet") ? false : void 0,
+          fit
+        });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;
       }

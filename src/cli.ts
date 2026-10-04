@@ -30,8 +30,9 @@ Commands:
     --fit <mode>                 cover | contain | smart (default cover)
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
-  colors [--port N] [--transparency <0-100>]
-                                 Re-apply stored theme; tune overall UI translucency (50 = default)
+  colors [--port N] [--blur <px>] [--dim <0-100>] [--transparency <0-100>]
+         [--fit cover|contain|smart] [--no-monet]
+                                 Re-apply stored theme and/or retune the look
   reset [--port N]               Remove wallpaper and color overrides
   status [--port N]              Show CDP reachability and renderer targets
   watch [--port N]               Watch mode: re-inject whenever ZCode (re)starts
@@ -121,8 +122,23 @@ async function main(): Promise<void> {
             return;
           }
         }
+        const rawBlur = flag("--blur");
+        const rawDim = flag("--dim");
+        const fit = flag("--fit");
+        if (fit && !["cover", "contain", "smart"].includes(fit)) {
+          console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
+          process.exitCode = 1;
+          return;
+        }
         const { applyColorsOnly } = await import("./core/session.js");
-        const windows = await applyColorsOnly({ port, transparency });
+        const windows = await applyColorsOnly({
+          port,
+          transparency,
+          blur: rawBlur !== undefined ? Number(rawBlur) : undefined,
+          dim: rawDim !== undefined ? Number(rawDim) : undefined,
+          monet: has("--no-monet") ? false : undefined,
+          fit: fit as ApplyOptions["fit"],
+        });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;
       }

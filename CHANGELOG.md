@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.6.2
+
+Two panel defects reported from the field, both fixed in the injected panel.
+
+### Fixed
+
+- **The 🎨 button could read as dead.** After the panel was dragged and the
+  window later resized smaller, the panel could sit entirely outside the
+  viewport while still "open" — clicking 🎨 toggled it, but nothing appeared.
+  Opening the panel now re-anchors it to the default corner whenever it lies
+  out of view.
+- **Dragging a slider made the picture jump between display states.** The
+  panel's 4s status poll restamped every control from the stored config, so
+  mid-drag the slider (and the injected look — blur, zoom, translucency)
+  snapped back to the last saved value before the debounced push landed. The
+  poll no longer touches a control the user is currently on
+  (`document.activeElement` guard, same pattern as the recovery select).
+- `colors` now honors `--blur`, `--dim`, `--fit` and `--no-monet` (they were
+  silently ignored before; the usage text documents them).
+
 ## v0.6.1
 
 The autostart entry no longer goes stale after plugin updates.

@@ -208,12 +208,20 @@ export function buildPanelScript(apiPort: number, token: string): string {
       .then(function (r) { return r.json(); })
       .then(function (c) {
         setOffline(false);
-        $('zb-blur').value = c.blur; $('zb-blur-val').textContent = c.blur;
-        $('zb-dim').value = c.dim; $('zb-dim-val').textContent = c.dim;
-        $('zb-trans').value = (typeof c.transparency === 'number' ? c.transparency : 50);
-        $('zb-trans-val').textContent = $('zb-trans').value;
-        $('zb-monet').checked = !!c.monet;
-        $('zb-vis').checked = !!c.wallpaperVisible;
+        // While the user is on a control (dragging a slider, toggling a box),
+        // the 4s poll must not yank it back to the stored value — that made
+        // the picture visibly jump between display states mid-drag.
+        var applyVal = function (slider, label, v) {
+          var el = $(slider);
+          if (!el || document.activeElement === el) return;
+          el.value = v;
+          $(label).textContent = v;
+        };
+        applyVal('zb-blur', 'zb-blur-val', c.blur);
+        applyVal('zb-dim', 'zb-dim-val', c.dim);
+        applyVal('zb-trans', 'zb-trans-val', (typeof c.transparency === 'number' ? c.transparency : 50));
+        var m = $('zb-monet'); if (m && document.activeElement !== m) m.checked = !!c.monet;
+        var v = $('zb-vis'); if (v && document.activeElement !== v) v.checked = !!c.wallpaperVisible;
         $('zb-fit') && applyFitLabel($('zb-fit'), c.fit || 'cover');
         var resetBtn = $('zb-reset');
         if (c.wallpaperSet) {
@@ -341,9 +349,14 @@ export function buildPanelScript(apiPort: number, token: string): string {
     var p = $('zb-panel');
     p.hidden = !p.hidden;
     if (!p.hidden) {
-      refresh();
-      refreshStatus();
-      beat(true);
+      // A panel dragged or stranded outside the viewport (window got resized
+      // after a drag) reads as a dead button: opening it re-anchors the panel
+      // whenever it is out of view.
+      var pr = p.getBoundingClientRect();
+      if (pr.left > innerWidth - 60 || pr.top > innerHeight - 60 || pr.right < 60 || pr.bottom < 60) {
+        p.style.left = ''; p.style.top = ''; p.style.right = '18px'; p.style.bottom = '60px';
+      }
+      refresh(); refreshStatus(); beat(true);
     } else if (root.getAttribute('data-offline') !== '1') {
       beat(false);
     }
