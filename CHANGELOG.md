@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.1
+
+The autostart entry no longer goes stale after plugin updates.
+
+### Fixed
+
+- The `always` recovery mode registered the resident service with a **hardcoded
+  version path** (`cache/<version>/dist/cli.js`). Every plugin update left the
+  entry pointing at the old bundle, so after a reboot the stale service
+  injected a panel without the newest features (field report: the new
+  transparency slider vanished after update + restart). The entry now boots a
+  version-stable shim in the plugin data dir (`autostart.mjs`) that resolves
+  the newest installed bundle on every start, on all three platforms.
+  Re-run `autostart install` (or re-select "always" in the panel) once to
+  migrate an existing entry.
+
 ## v0.6.0
 
 One knob for the translucency of every UI surface.

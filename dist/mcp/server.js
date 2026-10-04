@@ -144801,10 +144801,47 @@ function autostartEntryPath() {
 function vbsLiteral(value) {
   return `"${value.replace(/"/g, '""')}"`;
 }
+function autostartShimPath() {
+  return path3.join(dataDir(), "autostart.mjs");
+}
+var SHIM_SOURCE = `// zcode-beautify autostart shim (rewritten by \`autostart install\`).
+// Resolves the newest installed plugin bundle and forwards this process's
+// arguments to its CLI, so the entry survives version updates.
+import { spawn } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+
+const root = path.join(os.homedir(), ".zcode", "cli", "plugins", "cache", "zcode-beautify", "zcode-beautify");
+let newest = "";
+try {
+  newest = readdirSync(root)
+    .filter((d) => /^\\d+\\.\\d+\\.\\d+/.test(d) && existsSync(path.join(root, d, "dist", "cli.js")))
+    .sort((a, b) => {
+      const pa = a.split(".").map(Number);
+      const pb = b.split(".").map(Number);
+      for (let i = 0; i < 3; i++) {
+        if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+      }
+      return 0;
+    })
+    .pop() ?? "";
+} catch { }
+if (!newest) process.exit(1);
+
+const cli = path.join(root, newest, "dist", "cli.js");
+const child = spawn(process.execPath, [cli, ...process.argv.slice(2)], {
+  detached: true,
+  stdio: "ignore",
+  windowsHide: true,
+});
+child.unref();
+`;
 function windowsScript(spec) {
   const command = [
     `"${spec.nodePath}"`,
-    `"${spec.cliPath}"`,
+    `"${autostartShimPath()}"`,
     "serve",
     "--port",
     String(spec.cdpPort),
@@ -144830,7 +144867,7 @@ function macosScript(spec) {
   <key>ProgramArguments</key>
   <array>
     <string>${spec.nodePath}</string>
-    <string>${spec.cliPath}</string>
+    <string>${autostartShimPath()}</string>
     <string>serve</string>
     <string>--port</string>
     <string>${spec.cdpPort}</string>
@@ -144846,7 +144883,7 @@ function macosScript(spec) {
 `;
 }
 function linuxScript(spec) {
-  const exec = [spec.nodePath, spec.cliPath, "serve", "--port", String(spec.cdpPort), "--api-port", String(spec.apiPort)].map((part) => /[\s"]/.test(part) ? `"${part.replace(/"/g, '\\"')}"` : part).join(" ");
+  const exec = [spec.nodePath, autostartShimPath(), "serve", "--port", String(spec.cdpPort), "--api-port", String(spec.apiPort)].map((part) => /[\s"]/.test(part) ? `"${part.replace(/"/g, '\\"')}"` : part).join(" ");
   return `[Desktop Entry]
 Type=Application
 Name=ZCode Beautify
@@ -144870,6 +144907,7 @@ function installAutostart(spec) {
     return getAutostartStatus();
   const script = process.platform === "win32" ? windowsScript(spec) : process.platform === "darwin" ? macosScript(spec) : linuxScript(spec);
   fs5.mkdirSync(path3.dirname(entryPath), { recursive: true });
+  fs5.writeFileSync(autostartShimPath(), SHIM_SOURCE);
   fs5.writeFileSync(entryPath, script);
   return getAutostartStatus();
 }
@@ -145093,7 +145131,7 @@ async function repairLaunchers(opts) {
 // dist/mcp/server.js
 var server = new McpServer({
   name: "zcode-beautify",
-  version: "0.6.0"
+  version: "0.6.1"
 });
 server.registerTool("set_background", {
   title: "Set ZCode wallpaper",

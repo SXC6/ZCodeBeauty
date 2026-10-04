@@ -11,14 +11,19 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { dataDir } from "./launch.js";
 
 export const AUTOSTART_ID = "zcode-beautify";
 export const AUTOSTART_LABEL = "com.logocceai.zcode-beautify";
 
 export interface AutostartSpec {
-  /** Node binary that should run the CLI. */
+  /** Node binary that should run the entry. */
   nodePath: string;
-  /** Absolute path to the bundled dist/cli.js. */
+  /**
+   * Absolute path to the bundled dist/cli.js. Kept for compatibility, but the
+   * entry no longer points here: it boots the version-stable shim, which
+   * resolves the newest installed bundle on every start.
+   */
   cliPath: string;
   cdpPort: number;
   apiPort: number;
@@ -79,10 +84,56 @@ function vbsLiteral(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
+/**
+ * Update-proof launcher shim. The autostart entry used to point directly at
+ * `<cache>/<version>/dist/cli.js`, so every plugin update left it silently
+ * serving the old bundle (field report: the panel lost new features after an
+ * update plus reboot). The shim lives in the version-stable plugin data dir
+ * and resolves the newest installed bundle at start time.
+ */
+export function autostartShimPath(): string {
+  return path.join(dataDir(), "autostart.mjs");
+}
+
+const SHIM_SOURCE = `// zcode-beautify autostart shim (rewritten by \`autostart install\`).
+// Resolves the newest installed plugin bundle and forwards this process's
+// arguments to its CLI, so the entry survives version updates.
+import { spawn } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+
+const root = path.join(os.homedir(), ".zcode", "cli", "plugins", "cache", "zcode-beautify", "zcode-beautify");
+let newest = "";
+try {
+  newest = readdirSync(root)
+    .filter((d) => /^\\d+\\.\\d+\\.\\d+/.test(d) && existsSync(path.join(root, d, "dist", "cli.js")))
+    .sort((a, b) => {
+      const pa = a.split(".").map(Number);
+      const pb = b.split(".").map(Number);
+      for (let i = 0; i < 3; i++) {
+        if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+      }
+      return 0;
+    })
+    .pop() ?? "";
+} catch { }
+if (!newest) process.exit(1);
+
+const cli = path.join(root, newest, "dist", "cli.js");
+const child = spawn(process.execPath, [cli, ...process.argv.slice(2)], {
+  detached: true,
+  stdio: "ignore",
+  windowsHide: true,
+});
+child.unref();
+`;
+
 function windowsScript(spec: AutostartSpec): string {
   const command = [
     `"${spec.nodePath}"`,
-    `"${spec.cliPath}"`,
+    `"${autostartShimPath()}"`,
     "serve",
     "--port",
     String(spec.cdpPort),
@@ -109,7 +160,7 @@ function macosScript(spec: AutostartSpec): string {
   <key>ProgramArguments</key>
   <array>
     <string>${spec.nodePath}</string>
-    <string>${spec.cliPath}</string>
+    <string>${autostartShimPath()}</string>
     <string>serve</string>
     <string>--port</string>
     <string>${spec.cdpPort}</string>
@@ -126,7 +177,7 @@ function macosScript(spec: AutostartSpec): string {
 }
 
 function linuxScript(spec: AutostartSpec): string {
-  const exec = [spec.nodePath, spec.cliPath, "serve", "--port", String(spec.cdpPort), "--api-port", String(spec.apiPort)]
+  const exec = [spec.nodePath, autostartShimPath(), "serve", "--port", String(spec.cdpPort), "--api-port", String(spec.apiPort)]
     .map((part) => (/[\s"]/.test(part) ? `"${part.replace(/"/g, '\\"')}"` : part))
     .join(" ");
   return `[Desktop Entry]
@@ -160,6 +211,7 @@ export function installAutostart(spec: AutostartSpec): AutostartStatus {
         : linuxScript(spec);
 
   fs.mkdirSync(path.dirname(entryPath), { recursive: true });
+  fs.writeFileSync(autostartShimPath(), SHIM_SOURCE);
   fs.writeFileSync(entryPath, script);
   return getAutostartStatus();
 }
