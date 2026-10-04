@@ -110804,7 +110804,11 @@ function buildPanelScript(apiPort, token) {
   var palPushTimer = null;
 
   function hsvToHex(h, s, v) {
-    var i = Math.floor(h / 60) % 6, f = h / 60 - Math.floor(h);
+    // f is the fractional position WITHIN the 60\xB0 sector: both floors divide
+    // h by 60. (floor(h) alone made f hugely negative for h \u2265 60 and garbage
+    // bytes for every color whose hue wrapped past the first sector \u2014 the
+    // quick picks looked nothing like their chip.)
+    var i = Math.floor(h / 60) % 6, f = h / 60 - Math.floor(h / 60);
     var p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
     var rgb = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i];
     return '#' + rgb.map(function (c) { return ('0' + Math.round(c * 255).toString(16)).slice(-2); }).join('').toUpperCase();
