@@ -37,8 +37,22 @@ const JPEG_QUALITY = 82;
 
 /** Decodes with jimp but names the supported formats when it fails. */
 async function readImage(imagePath: string) {
+  // A decoder that neither returns nor throws (a WebP that slipped past the
+  // format guards wedged the whole API once) must not hang forever: cap the
+  // decode and surface a plain error instead.
+  let timeoutReject: ((err: Error) => void) | undefined;
+  const timer = setTimeout(
+    () => timeoutReject?.(new Error(`decoding timed out after ${DECODE_TIMEOUT_MS / 1000}s`)),
+    DECODE_TIMEOUT_MS
+  );
+  timer.unref?.();
   try {
-    return await Jimp.read(imagePath);
+    return await Promise.race([
+      Jimp.read(imagePath),
+      new Promise<never>((_, reject) => {
+        timeoutReject = reject;
+      }),
+    ]);
   } catch (err) {
     // jimp's raw decoder errors are cryptic; say what actually matters.
     throw new Error(
@@ -47,6 +61,7 @@ async function readImage(imagePath: string) {
     );
   }
 }
+const DECODE_TIMEOUT_MS = 30_000;
 
 export async function loadWallpaper(imagePath: string, maxDimension = MAX_WIDTH): Promise<WallpaperAssets> {
   const image = await readImage(imagePath);

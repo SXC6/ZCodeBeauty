@@ -144325,12 +144325,21 @@ function customColor(source, color) {
 var MAX_WIDTH = 2560;
 var JPEG_QUALITY = 82;
 async function readImage(imagePath) {
+  let timeoutReject;
+  const timer = setTimeout(() => timeoutReject?.(new Error(`decoding timed out after ${DECODE_TIMEOUT_MS / 1e3}s`)), DECODE_TIMEOUT_MS);
+  timer.unref?.();
   try {
-    return await Jimp.read(imagePath);
+    return await Promise.race([
+      Jimp.read(imagePath),
+      new Promise((_, reject) => {
+        timeoutReject = reject;
+      })
+    ]);
   } catch (err) {
     throw new Error(`Cannot decode image "${imagePath}": ${err.message}. Supported formats: JPEG, PNG, BMP, GIF, TIFF (WebP is not supported).`);
   }
 }
+var DECODE_TIMEOUT_MS = 3e4;
 async function loadWallpaper(imagePath, maxDimension = MAX_WIDTH) {
   const image2 = await readImage(imagePath);
   const { width, height } = image2.bitmap;
@@ -144753,6 +144762,9 @@ async function applyWallpaper(imagePath, opts) {
   const abs = path2.resolve(imagePath);
   if (!fs4.existsSync(abs))
     throw new Error(`Image not found: ${abs}`);
+  if (/\.webp$/i.test(abs)) {
+    throw new Error("WebP is not supported by the local decoder \u2014 re-export the image as JPG or PNG and import again.");
+  }
   const stored = loadConfig();
   const config2 = {
     ...DEFAULT_CONFIG,

@@ -28,6 +28,12 @@ export async function reapplyStored(): Promise<number> {
 export async function applyWallpaper(imagePath: string, opts: ApplyOptions): Promise<{ windows: number; config: BeautifyConfig }> {
   const abs = path.resolve(imagePath);
   if (!fs.existsSync(abs)) throw new Error(`Image not found: ${abs}`);
+  // Mirror the server route's format guard. jimp cannot decode WebP — and its
+  // decode attempt never settles, which would wedge every later API call, so
+  // reject it before a single byte is copied.
+  if (/\.webp$/i.test(abs)) {
+    throw new Error("WebP is not supported by the local decoder — re-export the image as JPG or PNG and import again.");
+  }
 
   const stored = loadConfig();
   const config: BeautifyConfig = {
