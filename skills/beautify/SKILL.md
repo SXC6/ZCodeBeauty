@@ -33,10 +33,12 @@ modifies ZCode's installation files.
    registry entries on every start. In `on-start` mode the plugin performs this
    repair by itself at startup whenever the port is unreachable.
 4. **Fine-tune with `apply_options`** (blur / dim / monet / wallpaper_visible /
-   fit) when the user wants adjustments — it does not need the image path
-   again. `fit` picks the framing: `cover` fills and crops, `contain`
-   letterboxes over a blurred backdrop, `smart` analyzes the picture locally
-   and picks framing + focus automatically.
+   fit / overlay_color / overlay_strength) when the user wants adjustments — it
+   does not need the image path again. `fit` picks the framing: `cover` fills
+   and crops, `contain` letterboxes over a blurred backdrop, `smart` analyzes
+   the picture locally and picks framing + focus automatically. The overlay
+   blends a color over the wallpaper; strength is 1-100 and "off" is
+   `overlay_color: ""` — 0% is not a valid strength.
 5. **After ZCode restarts**, the injected theme is gone — the renderer that held
    it no longer exists. `recovery_status` reports which mechanism is in charge:
    `on-start` (default) restores it automatically once ZCode is up, `always`
@@ -45,7 +47,10 @@ modifies ZCode's installation files.
 6. **To undo everything**, use `reset_appearance`.
 7. **Recommend the settings panel** for an interactive experience: a draggable
    panel inside ZCode with blur/dim sliders, Monet toggle, wallpaper swap and
-   reset. It needs the resident service, so either set the recovery mode to
+   reset, plus a color-overlay palette (quick preset chips, hue/SV picking,
+   manual R/G/B entry, a 1-100% strength slider and 重置/关闭 buttons) that
+   docks beside the panel. It needs the resident service, so either set the
+   recovery mode to
    `always` (which starts it and registers the autostart entry) or run
    `node <plugin-root>/dist/cli.js serve --detach` once. `--detach` matters — a
    foreground `serve` is reaped with the shell or agent session that spawned it,
@@ -59,7 +64,7 @@ modifies ZCode's installation files.
 | Tool | Purpose |
 |---|---|
 | `set_background` | Set wallpaper + Monet colors |
-| `apply_options` | Tune blur/dim/monet/wallpaper visibility/framing without changing the image |
+| `apply_options` | Tune blur/dim/monet/wallpaper visibility/framing and the wallpaper overlay (color + strength) without changing the image |
 | `refresh_theme` | Re-inject stored theme after a restart |
 | `reset_appearance` | Remove wallpaper and overrides |
 | `beautify_status` | Show stored config |

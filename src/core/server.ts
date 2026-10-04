@@ -95,6 +95,7 @@ function publicConfig(config: BeautifyConfig) {
     fit: config.fit,
     transparency: config.transparency,
     overlayColor: config.overlayColor ?? "",
+    overlayStrength: config.overlayStrength,
     wallpaperSet: Boolean(config.wallpaperPath && fs.existsSync(config.wallpaperPath)),
     hasBackup: hasBackup(),
     cdpPort: config.port,
@@ -112,6 +113,11 @@ function sanitize(body: any): Partial<BeautifyConfig> {
   }
   if (typeof body?.overlayColor === "string" && /^$|^#[0-9a-fA-F]{6}$/.test(body.overlayColor)) {
     out.overlayColor = body.overlayColor;
+  }
+  // 1-100: "off" is expressed by overlayColor: "" — a 0% strength is not a
+  // thing a client may set.
+  if (typeof body?.overlayStrength === "number" && body.overlayStrength >= 1 && body.overlayStrength <= 100) {
+    out.overlayStrength = body.overlayStrength;
   }
   if (body?.fit === "cover" || body?.fit === "contain" || body?.fit === "smart") out.fit = body.fit;
   return out;

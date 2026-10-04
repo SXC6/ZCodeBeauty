@@ -52,7 +52,7 @@ server.registerTool(
   {
     title: "Tune ZCode appearance",
     description:
-      "Adjust the live ZCode appearance without changing the wallpaper: blur radius, dim level, Monet dynamic colors on/off, and wallpaper visibility (translucent vs opaque surfaces). Only the provided values change; the rest keep their current setting.",
+      "Adjust the live ZCode appearance without changing the wallpaper: blur radius, dim level, Monet dynamic colors on/off, wallpaper visibility (translucent vs opaque surfaces), and the wallpaper color overlay (color + strength). Only the provided values change; the rest keep their current setting.",
     inputSchema: {
       blur: z.number().min(0).max(100).optional().describe("Wallpaper blur radius in px"),
       dim: z.number().min(0).max(100).optional().describe("Wallpaper darkening 0-100"),
@@ -61,11 +61,12 @@ server.registerTool(
       fit: z.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point"),
       transparency: z.number().min(0).max(100).optional().describe("Overall UI surface translucency 0-100 (50 = the shipped look; lower = more opaque, higher = more see-through)"),
       overlay_color: z.string().optional().describe("Blend a color over the wallpaper, hex like '#4b6cb7'; pass an empty string to clear the overlay"),
+      overlay_strength: z.number().min(1).max(100).optional().describe("Overlay tint strength in percent (1-100); 0% means 'no overlay', which is overlay_color: '' — not a strength"),
     },
   },
-  async ({ blur, dim, monet, wallpaper_visible, fit, transparency, overlay_color }) => {
+  async ({ blur, dim, monet, wallpaper_visible, fit, transparency, overlay_color, overlay_strength }) => {
     try {
-      const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency, overlayColor: overlay_color });
+      const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency, overlayColor: overlay_color, overlayStrength: overlay_strength });
       return { content: [{ type: "text", text: `Appearance updated in ${windows} window(s).` }] };
     } catch (err) {
       return { content: [{ type: "text", text: `Failed: ${(err as Error).message}` }], isError: true };

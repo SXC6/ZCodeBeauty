@@ -60,7 +60,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
       ' background: rgba(24,24,30,.97); border: 1px solid rgba(255,255,255,.16); border-radius: 10px;',
       ' box-shadow: 0 8px 32px rgba(0,0,0,.5); }',
     '#zb-palette[hidden] { display: none; }',
-    '#zb-sv { position: relative; height: 130px; border-radius: 6px; cursor: crosshair; overflow: hidden;',
+    '#zb-sv { position: relative; height: 110px; border-radius: 6px; cursor: crosshair; overflow: hidden;',
       ' touch-action: none;',
       ' background-image: linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0)); }',
     '#zb-sv-knob { position: absolute; width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%;',
@@ -70,9 +70,20 @@ export function buildPanelScript(apiPort: number, token: string): string {
       ' border: 1px solid rgba(255,255,255,.2); }',
     '#zb-hue::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff;',
       ' border: 2px solid rgba(0,0,0,.35); box-shadow: 0 0 4px rgba(0,0,0,.4); }',
+    '.zb-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }',
+    '.zb-sw { width: 16px; height: 16px; border-radius: 4px; cursor: pointer; padding: 0;',
+      ' border: 1px solid rgba(255,255,255,.25); appearance: none; }',
+    '.zb-sw:hover { transform: scale(1.15); }',
+    '.zb-rgb { display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 10px; opacity: .85; }',
+    '.zb-rgb input { width: 40px; min-width: 0; padding: 2px 3px; font-size: 11px; color: inherit; border-radius: 4px;',
+      ' background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); }',
+    '.zb-rgb input::-webkit-inner-spin-button, .zb-rgb input::-webkit-outer-spin-button { appearance: none; margin: 0; }',
     '#zb-pal-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }',
     '#zb-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); flex: none; }',
     '#zb-pal-val { opacity: .85; white-space: nowrap; }',
+    '#zb-strength-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }',
+    '#zb-strength { flex: 1; margin: 0; height: 14px; min-width: 0; cursor: pointer; accent-color: #7aa2f7; }',
+    '#zb-strength-val { width: 34px; text-align: right; opacity: .85; }',
     '.zb-pal-actions { display: flex; gap: 8px; margin-top: 9px; }',
     '.zb-pal-actions .zb-btn { flex: 1; padding: 5px 0; font-size: 11px; appearance: none; }',
     '.zb-btn { display: inline-block; padding: 6px 20px; text-align: center; border-radius: 999px; cursor: pointer;',
@@ -151,7 +162,29 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '  <div id="zb-palette" hidden>' +
     '    <div id="zb-sv"><div id="zb-sv-knob"></div></div>' +
     '    <input type="range" id="zb-hue" min="0" max="360" step="1" value="0">' +
+    '    <div class="zb-swatches">' +
+    '      <button class="zb-sw" data-c="#ffffff" title="白" style="background:#ffffff"></button>' +
+    '      <button class="zb-sw" data-c="#000000" title="黑" style="background:#000000"></button>' +
+    '      <button class="zb-sw" data-c="#ff4d4f" title="红" style="background:#ff4d4f"></button>' +
+    '      <button class="zb-sw" data-c="#ff7a45" title="橙" style="background:#ff7a45"></button>' +
+    '      <button class="zb-sw" data-c="#fadb14" title="黄" style="background:#fadb14"></button>' +
+    '      <button class="zb-sw" data-c="#52c41a" title="绿" style="background:#52c41a"></button>' +
+    '      <button class="zb-sw" data-c="#13c2c2" title="青" style="background:#13c2c2"></button>' +
+    '      <button class="zb-sw" data-c="#1890ff" title="蓝" style="background:#1890ff"></button>' +
+    '      <button class="zb-sw" data-c="#722ed1" title="紫" style="background:#722ed1"></button>' +
+    '      <button class="zb-sw" data-c="#eb2f96" title="粉" style="background:#eb2f96"></button>' +
+    '    </div>' +
+    '    <div class="zb-rgb">' +
+    '      <span>R</span><input type="number" id="zb-r" min="0" max="255" step="1">' +
+    '      <span>G</span><input type="number" id="zb-g" min="0" max="255" step="1">' +
+    '      <span>B</span><input type="number" id="zb-b" min="0" max="255" step="1">' +
+    '    </div>' +
     '    <div id="zb-pal-row"><span id="zb-swatch"></span><span id="zb-pal-val"></span></div>' +
+    '    <div id="zb-strength-row">' +
+    '      <span>强度</span>' +
+    '      <input type="range" id="zb-strength" min="0" max="100" step="1" value="45">' +
+    '      <span id="zb-strength-val">45%</span>' +
+    '    </div>' +
     '    <div class="zb-pal-actions">' +
     '      <button class="zb-btn" id="zb-pal-reset">重置</button>' +
     '      <button class="zb-btn" id="zb-pal-close">关闭</button>' +
@@ -272,6 +305,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
         if (ov) {
           var active = typeof c.overlayColor === 'string' && c.overlayColor !== '';
           curOverlay = active ? c.overlayColor : '';
+          curStrength = typeof c.overlayStrength === 'number' && c.overlayStrength >= 1 ? c.overlayStrength : 45;
           ov.textContent = active ? '颜色叠加中' : '叠加颜色';
           if (active) ov.setAttribute('data-active', '1'); else ov.removeAttribute('data-active');
         }
@@ -333,11 +367,15 @@ export function buildPanelScript(apiPort: number, token: string): string {
     fr.readAsDataURL(f);
   });
 
-  // Custom palette state. curOverlay tracks the stored config (kept fresh by
-  // refresh()); opening with no active overlay shows white. It deliberately
-  // has no outside-click or wheel handler — the palette must survive both.
+  // Custom palette state. curOverlay/curStrength mirror the stored config
+  // (kept fresh by refresh()); opening with no active overlay shows white at
+  // 0%. The palette deliberately has no outside-click or wheel handler — it
+  // must survive both.
   var curOverlay = '';
+  var curStrength = 45;
   var palH = 0, palS = 0, palV = 1;
+  var palStrength = 45; // the strength the next push applies, always 1-100
+  var palOn = false;    // false = palette mirrors "no overlay" (readout 0%)
   var palPushTimer = null;
 
   function hsvToHex(h, s, v) {
@@ -368,23 +406,35 @@ export function buildPanelScript(apiPort: number, token: string): string {
     $('zb-sv-knob').style.left = (palS * 100) + '%';
     $('zb-sv-knob').style.bottom = (palV * 100) + '%';
     var rgb = hexToRgb(hex);
+    $('zb-r').value = rgb[0];
+    $('zb-g').value = rgb[1];
+    $('zb-b').value = rgb[2];
     $('zb-swatch').style.backgroundColor = hex;
-    $('zb-pal-val').textContent = hex + ' (' + rgb.join(',') + ')';
+    // The readout shows what the palette would apply right now; with nothing
+    // active that is white at 0%. The strength control itself never goes
+    // below 1 — "off" lives in the overlay toggle, not in a 0% strength.
+    var pct = (palOn ? palStrength : 0) + '%';
+    $('zb-pal-val').textContent = hex + ' (' + rgb.join(',') + ') ' + pct;
+    $('zb-strength').value = palOn ? palStrength : 0;
+    $('zb-strength-val').textContent = pct;
     if (!push) return;
     clearTimeout(palPushTimer);
     palPushTimer = setTimeout(function () {
       var ov = $('zb-overlay');
       ov.textContent = '颜色叠加中';
       ov.setAttribute('data-active', '1');
-      post('/api/config', { overlayColor: hex }, function () { status('颜色叠加已应用'); refresh(); });
+      post('/api/config', { overlayColor: hex, overlayStrength: palStrength }, function () { status('颜色叠加已应用'); refresh(); });
     }, 200);
   }
   function paletteOpen() { return !$('zb-palette').hidden; }
   function closePalette() { $('zb-palette').hidden = true; }
   function openPalette() {
-    var rgb = /^#[0-9a-fA-F]{6}$/.test(curOverlay) ? hexToRgb(curOverlay) : [255, 255, 255];
+    var active = /^#[0-9a-fA-F]{6}$/.test(curOverlay);
+    var rgb = active ? hexToRgb(curOverlay) : [255, 255, 255];
     var hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
     palH = hsv[0]; palS = hsv[1]; palV = hsv[2];
+    palOn = active;
+    palStrength = active ? Math.min(100, Math.max(1, Math.round(curStrength))) : 45;
     var pal = $('zb-palette'), panel = $('zb-panel'), btn = $('zb-overlay');
     palApply(false);
     pal.hidden = false;
@@ -407,6 +457,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
     var r = sv.getBoundingClientRect();
     palS = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     palV = Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height));
+    palOn = true;
     palApply(true);
   }
   sv.addEventListener('pointerdown', function (e) {
@@ -416,6 +467,50 @@ export function buildPanelScript(apiPort: number, token: string): string {
   sv.addEventListener('pointermove', function (e) { if (e.buttons & 1) svPick(e); });
   $('zb-hue').addEventListener('input', function () {
     palH = Number(this.value);
+    palOn = true;
+    palApply(true);
+  });
+  // Quick picks: apply the preset color at the current strength.
+  var chips = document.querySelectorAll('#zb-palette .zb-sw');
+  for (var ci = 0; ci < chips.length; ci++) {
+    chips[ci].addEventListener('click', function () {
+      var rgb = hexToRgb(this.getAttribute('data-c'));
+      var hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+      palH = hsv[0]; palS = hsv[1]; palV = hsv[2];
+      palOn = true;
+      palApply(true);
+    });
+  }
+  // Manual RGB entry: clamp to 0-255 (junk and negatives never apply), then
+  // feed the same HSV state the pointer controls drive.
+  function clampByte(raw) {
+    if (raw === '' || raw === null) return null;
+    var v = Math.round(Number(raw));
+    if (!Number.isFinite(v)) return null;
+    return Math.min(255, Math.max(0, v));
+  }
+  function rgbInput() {
+    var r = clampByte($('zb-r').value), g = clampByte($('zb-g').value), b = clampByte($('zb-b').value);
+    if (r === null || g === null || b === null) return;
+    var hsv = rgbToHsv(r, g, b);
+    palH = hsv[0]; palS = hsv[1]; palV = hsv[2];
+    palOn = true;
+    palApply(true);
+  }
+  $('zb-r').addEventListener('input', rgbInput);
+  $('zb-g').addEventListener('input', rgbInput);
+  $('zb-b').addEventListener('input', rgbInput);
+  // The strength control never sets 0 (or below): 0% is the "no overlay"
+  // state, reachable only through 重置 / right-click. Dragging up from the
+  // seeded 0 applies the shown color at the new strength.
+  $('zb-strength').addEventListener('input', function () {
+    var v = Math.round(Number(this.value));
+    if (!(v >= 1)) {
+      this.value = palOn ? palStrength : 0;
+      return;
+    }
+    palOn = true;
+    palStrength = Math.min(100, v);
     palApply(true);
   });
   $('zb-pal-reset').addEventListener('click', function () {

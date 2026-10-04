@@ -93,7 +93,7 @@ node dist/cli.js recovery on-start
 node dist/cli.js serve --detach
 ```
 
-`serve` 运行时,ZCode 右下角出现 🎨 按钮。点开即可实时调 blur/dim、循环切换取景模式(cover → contain → smart)、开关 Monet 配色与壁纸透显、更换壁纸图片或一键还原——所有调整即时预览、自动保存。服务未运行时,面板会明确显示 ⚠ 离线提示,而不是装作配置全为 0。
+`serve` 运行时,ZCode 右下角出现 🎨 按钮。点开即可实时调 blur/dim、循环切换取景模式(cover → contain → smart)、开关 Monet 配色与壁纸透显、更换壁纸图片或一键还原——所有调整即时预览、自动保存。【叠加颜色】按钮会弹出停靠在面板旁边的调色板:选颜色(SV 色域、色相条、十个常用色快捷块、或直接填 R/G/B 值),再调叠加强度(1-100%,不允许 0%——取消叠加走【重置】或右键按钮),读数实时显示将要应用的颜色与强度,例如无叠加时为 `#FFFFFF (255,255,255) 0%`。服务未运行时,面板会明确显示 ⚠ 离线提示,而不是装作配置全为 0。
 
 也可以直接在 ZCode 里输入 `/beautify <图片路径>` 让智能体操作,之后说"模糊调高一点"即可(由 `apply_options` MCP 工具处理)。
 
@@ -103,7 +103,7 @@ node dist/cli.js serve --detach
 |---|---|
 | `launch [--port N]` | 以调试端口启动 ZCode(需先完全退出) |
 | `apply <image> [--blur] [--dim] [--fit] [--no-monet]` | 设壁纸并适配配色(`--fit cover\|contain\|smart`) |
-| `colors` | 不换图,重新应用已存主题(`--transparency 0-100` 调界面整体透明度,50 为默认) |
+| `colors` | 不换图,重新应用已存主题(`--transparency 0-100` 调界面整体透明度,50 为默认;`--overlay-color <#rrggbb\|none>` 与 `--overlay-strength 1-100` 控制壁纸颜色叠加) |
 | `serve [--detach] [--api-port M]` | 守护模式 + 设置面板 + 本地控制 API(默认 API 端口 9223);`--detach` 使其脱离启动它的终端存活 |
 | `watch` | 无面板守护模式:ZCode 重启后自动重注入 |
 | `recovery [off\|on-start\|always]` | 重启后由谁恢复主题(默认 `on-start`) |
@@ -117,7 +117,7 @@ node dist/cli.js serve --detach
 | 工具 | 用途 |
 |---|---|
 | `set_background` | 设壁纸 + 莫奈配色 |
-| `apply_options` | 不重传图片,单独调 blur/dim/monet/壁纸透显/取景模式/界面透明度 |
+| `apply_options` | 不重传图片,单独调 blur/dim/monet/壁纸透显/取景模式/界面透明度/壁纸颜色叠加(颜色 + 强度) |
 | `refresh_theme` | 重启后重注入已存主题 |
 | `reset_appearance` | 移除壁纸与覆盖,还原默认 |
 | `beautify_status` | 查看已存配置 |

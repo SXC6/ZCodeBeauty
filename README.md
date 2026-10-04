@@ -97,7 +97,7 @@ node dist/cli.js recovery on-start
 node dist/cli.js serve --detach
 ```
 
-With `serve` running, a 🎨 button appears in the bottom-right corner of ZCode. Open it to tune blur/dim live, cycle the framing mode (cover → contain → smart), toggle Monet colors or wallpaper translucency, swap the wallpaper image, or reset — everything previews instantly and is saved automatically. If the service is not running, the panel shows an explicit ⚠ offline banner instead of a zeroed configuration.
+With `serve` running, a 🎨 button appears in the bottom-right corner of ZCode. Open it to tune blur/dim live, cycle the framing mode (cover → contain → smart), toggle Monet colors or wallpaper translucency, swap the wallpaper image, or reset — everything previews instantly and is saved automatically. The 叠加颜色 button opens a palette docked beside the panel: pick a color (SV square, hue bar, ten quick preset chips, or type R/G/B values), set the overlay strength (1-100%, never 0 — turning the overlay off is what 重置 / right-click do), and the readout shows exactly what will apply, e.g. `#FFFFFF (255,255,255) 0%` when no overlay is active. If the service is not running, the panel shows an explicit ⚠ offline banner instead of a zeroed configuration.
 
 You can also just type `/beautify <image path>` in ZCode and let the agent do it, then say things like "make it blurrier" (handled by the `apply_options` MCP tool).
 
@@ -107,7 +107,7 @@ You can also just type `/beautify <image path>` in ZCode and let the agent do it
 |---|---|
 | `launch [--port N]` | Start ZCode with `--remote-debugging-port` (quit ZCode first) |
 | `apply <image> [--blur] [--dim] [--fit] [--no-monet]` | Set wallpaper + adapt colors (`--fit cover\|contain\|smart`) |
-| `colors [--port N] [--transparency <0-100>]` | Re-apply the stored theme; `--transparency` tunes overall UI translucency (50 = default) |
+| `colors [--port N] [--transparency <0-100>]` | Re-apply the stored theme; `--transparency` tunes overall UI translucency (50 = default); `--overlay-color <#rrggbb\|none>` and `--overlay-strength <1-100>` control the wallpaper tint |
 | `serve [--detach] [--api-port M]` | Watch mode + settings panel + local control API (default API port 9223); `--detach` survives the shell that started it |
 | `watch` | Headless watch mode: re-inject whenever ZCode restarts |
 | `recovery [off\|on-start\|always]` | How the theme comes back after a restart (default `on-start`) |
@@ -121,7 +121,7 @@ You can also just type `/beautify <image path>` in ZCode and let the agent do it
 | Tool | Purpose |
 |---|---|
 | `set_background` | Set wallpaper + Monet colors |
-| `apply_options` | Tune blur/dim/monet/wallpaper visibility/framing/UI translucency without re-sending the image |
+| `apply_options` | Tune blur/dim/monet/wallpaper visibility/framing/UI translucency and the wallpaper overlay (color + strength) without re-sending the image |
 | `refresh_theme` | Re-inject the stored theme after a restart |
 | `reset_appearance` | Remove wallpaper and overrides |
 | `beautify_status` | Show the stored config |

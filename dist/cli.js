@@ -109782,18 +109782,20 @@ var init_tokens = __esm({
 });
 
 // dist/core/inject.js
+function normalizeStrength(value) {
+  const n2 = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : DEFAULT_OVERLAY_STRENGTH;
+  return Math.min(100, Math.max(1, n2));
+}
 function hexRgba(hex, alpha) {
   const n2 = parseInt(hex.slice(1), 16);
   return `rgb(${n2 >> 16 & 255} ${n2 >> 8 & 255} ${n2 & 255} / ${alpha})`;
 }
-function buildPayload(config, assets) {
-  const parts = [];
-  const resolved = config.fit === "smart" ? assets?.focus.fit ?? "cover" : config.fit === "contain" ? "contain" : "cover";
-  const focusX = config.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
-  const focusY = config.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
-  const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
-  parts.push(`
-html, body { background: transparent !important; }
+function pageTransparentCss() {
+  return `
+html, body { background: transparent !important; }`;
+}
+function backdropLayerCss() {
+  return `
 #zcode-beautify-backdrop {
   position: fixed;
   inset: 0;
@@ -109806,11 +109808,12 @@ html, body { background: transparent !important; }
   transform: scale(1.12);
   display: none;
 }
-#zcode-beautify-backdrop[data-on="1"] { display: block; }`);
-  if (config.wallpaperVisible) {
-    const effectiveBlur = config.blur > 0 ? (config.blur * 0.3).toFixed(2) : "0";
-    const overlay2 = config.overlayColor ? hexRgba(config.overlayColor, 0.45) : "";
-    parts.push(`
+#zcode-beautify-backdrop[data-on="1"] { display: block; }`;
+}
+function wallpaperLayerCss(config, resolved, position) {
+  const effectiveBlur = config.blur > 0 ? (config.blur * BLUR_DAMPING).toFixed(2) : "0";
+  const overlay2 = config.overlayColor ? hexRgba(config.overlayColor, normalizeStrength(config.overlayStrength) / 100) : "";
+  return `
 :root { --zcode-beautify-blur: blur(${effectiveBlur}px); --zcode-beautify-dim: ${config.dim / 100}; }
 #zcode-beautify-wallpaper {
   position: fixed;
@@ -109833,7 +109836,18 @@ html, body { background: transparent !important; }
   inset: 0;
   background-color: rgb(0 0 0 / var(--zcode-beautify-dim));${overlay2 ? `
   background-image: linear-gradient(${overlay2}, ${overlay2});` : ""}
-}`);
+}`;
+}
+function buildPayload(config, assets) {
+  const parts = [];
+  const resolved = config.fit === "smart" ? assets?.focus.fit ?? "cover" : config.fit === "contain" ? "contain" : "cover";
+  const focusX = config.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
+  const focusY = config.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
+  const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
+  parts.push(pageTransparentCss());
+  parts.push(backdropLayerCss());
+  if (config.wallpaperVisible) {
+    parts.push(wallpaperLayerCss(config, resolved, position));
   }
   if (assets) {
     if (config.monet) {
@@ -109886,13 +109900,15 @@ async function resetZCode(port) {
   }
   return count;
 }
-var DEFAULT_CONFIG;
+var BLUR_DAMPING, DEFAULT_OVERLAY_STRENGTH, DEFAULT_CONFIG;
 var init_inject = __esm({
   "dist/core/inject.js"() {
     "use strict";
     init_cdp();
     init_monet();
     init_tokens();
+    BLUR_DAMPING = 0.3;
+    DEFAULT_OVERLAY_STRENGTH = 45;
     DEFAULT_CONFIG = {
       port: 9222,
       blur: 0,
@@ -109901,7 +109917,8 @@ var init_inject = __esm({
       wallpaperVisible: true,
       fit: "cover",
       transparency: 50,
-      overlayColor: ""
+      overlayColor: "",
+      overlayStrength: DEFAULT_OVERLAY_STRENGTH
     };
   }
 });
@@ -110132,7 +110149,8 @@ async function applyWallpaper(imagePath, opts) {
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
     transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
-    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
+    overlayStrength: opts.overlayStrength ?? stored.overlayStrength ?? DEFAULT_CONFIG.overlayStrength
   };
   fs4.mkdirSync(dataDir(), { recursive: true });
   const dest = path2.join(dataDir(), "wallpaper" + path2.extname(abs).toLowerCase());
@@ -110156,7 +110174,8 @@ async function applyColorsOnly(opts) {
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
     transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
-    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
+    overlayStrength: opts.overlayStrength ?? stored.overlayStrength ?? DEFAULT_CONFIG.overlayStrength
   };
   saveConfig(config);
   return applyToZCode(config, await buildPayloadFromConfig(config));
@@ -110446,7 +110465,7 @@ function buildPanelScript(apiPort, token) {
       ' background: rgba(24,24,30,.97); border: 1px solid rgba(255,255,255,.16); border-radius: 10px;',
       ' box-shadow: 0 8px 32px rgba(0,0,0,.5); }',
     '#zb-palette[hidden] { display: none; }',
-    '#zb-sv { position: relative; height: 130px; border-radius: 6px; cursor: crosshair; overflow: hidden;',
+    '#zb-sv { position: relative; height: 110px; border-radius: 6px; cursor: crosshair; overflow: hidden;',
       ' touch-action: none;',
       ' background-image: linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0)); }',
     '#zb-sv-knob { position: absolute; width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%;',
@@ -110456,9 +110475,20 @@ function buildPanelScript(apiPort, token) {
       ' border: 1px solid rgba(255,255,255,.2); }',
     '#zb-hue::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff;',
       ' border: 2px solid rgba(0,0,0,.35); box-shadow: 0 0 4px rgba(0,0,0,.4); }',
+    '.zb-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }',
+    '.zb-sw { width: 16px; height: 16px; border-radius: 4px; cursor: pointer; padding: 0;',
+      ' border: 1px solid rgba(255,255,255,.25); appearance: none; }',
+    '.zb-sw:hover { transform: scale(1.15); }',
+    '.zb-rgb { display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 10px; opacity: .85; }',
+    '.zb-rgb input { width: 40px; min-width: 0; padding: 2px 3px; font-size: 11px; color: inherit; border-radius: 4px;',
+      ' background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); }',
+    '.zb-rgb input::-webkit-inner-spin-button, .zb-rgb input::-webkit-outer-spin-button { appearance: none; margin: 0; }',
     '#zb-pal-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }',
     '#zb-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); flex: none; }',
     '#zb-pal-val { opacity: .85; white-space: nowrap; }',
+    '#zb-strength-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }',
+    '#zb-strength { flex: 1; margin: 0; height: 14px; min-width: 0; cursor: pointer; accent-color: #7aa2f7; }',
+    '#zb-strength-val { width: 34px; text-align: right; opacity: .85; }',
     '.zb-pal-actions { display: flex; gap: 8px; margin-top: 9px; }',
     '.zb-pal-actions .zb-btn { flex: 1; padding: 5px 0; font-size: 11px; appearance: none; }',
     '.zb-btn { display: inline-block; padding: 6px 20px; text-align: center; border-radius: 999px; cursor: pointer;',
@@ -110537,7 +110567,29 @@ function buildPanelScript(apiPort, token) {
     '  <div id="zb-palette" hidden>' +
     '    <div id="zb-sv"><div id="zb-sv-knob"></div></div>' +
     '    <input type="range" id="zb-hue" min="0" max="360" step="1" value="0">' +
+    '    <div class="zb-swatches">' +
+    '      <button class="zb-sw" data-c="#ffffff" title="\u767D" style="background:#ffffff"></button>' +
+    '      <button class="zb-sw" data-c="#000000" title="\u9ED1" style="background:#000000"></button>' +
+    '      <button class="zb-sw" data-c="#ff4d4f" title="\u7EA2" style="background:#ff4d4f"></button>' +
+    '      <button class="zb-sw" data-c="#ff7a45" title="\u6A59" style="background:#ff7a45"></button>' +
+    '      <button class="zb-sw" data-c="#fadb14" title="\u9EC4" style="background:#fadb14"></button>' +
+    '      <button class="zb-sw" data-c="#52c41a" title="\u7EFF" style="background:#52c41a"></button>' +
+    '      <button class="zb-sw" data-c="#13c2c2" title="\u9752" style="background:#13c2c2"></button>' +
+    '      <button class="zb-sw" data-c="#1890ff" title="\u84DD" style="background:#1890ff"></button>' +
+    '      <button class="zb-sw" data-c="#722ed1" title="\u7D2B" style="background:#722ed1"></button>' +
+    '      <button class="zb-sw" data-c="#eb2f96" title="\u7C89" style="background:#eb2f96"></button>' +
+    '    </div>' +
+    '    <div class="zb-rgb">' +
+    '      <span>R</span><input type="number" id="zb-r" min="0" max="255" step="1">' +
+    '      <span>G</span><input type="number" id="zb-g" min="0" max="255" step="1">' +
+    '      <span>B</span><input type="number" id="zb-b" min="0" max="255" step="1">' +
+    '    </div>' +
     '    <div id="zb-pal-row"><span id="zb-swatch"></span><span id="zb-pal-val"></span></div>' +
+    '    <div id="zb-strength-row">' +
+    '      <span>\u5F3A\u5EA6</span>' +
+    '      <input type="range" id="zb-strength" min="0" max="100" step="1" value="45">' +
+    '      <span id="zb-strength-val">45%</span>' +
+    '    </div>' +
     '    <div class="zb-pal-actions">' +
     '      <button class="zb-btn" id="zb-pal-reset">\u91CD\u7F6E</button>' +
     '      <button class="zb-btn" id="zb-pal-close">\u5173\u95ED</button>' +
@@ -110658,6 +110710,7 @@ function buildPanelScript(apiPort, token) {
         if (ov) {
           var active = typeof c.overlayColor === 'string' && c.overlayColor !== '';
           curOverlay = active ? c.overlayColor : '';
+          curStrength = typeof c.overlayStrength === 'number' && c.overlayStrength >= 1 ? c.overlayStrength : 45;
           ov.textContent = active ? '\u989C\u8272\u53E0\u52A0\u4E2D' : '\u53E0\u52A0\u989C\u8272';
           if (active) ov.setAttribute('data-active', '1'); else ov.removeAttribute('data-active');
         }
@@ -110719,11 +110772,15 @@ function buildPanelScript(apiPort, token) {
     fr.readAsDataURL(f);
   });
 
-  // Custom palette state. curOverlay tracks the stored config (kept fresh by
-  // refresh()); opening with no active overlay shows white. It deliberately
-  // has no outside-click or wheel handler \u2014 the palette must survive both.
+  // Custom palette state. curOverlay/curStrength mirror the stored config
+  // (kept fresh by refresh()); opening with no active overlay shows white at
+  // 0%. The palette deliberately has no outside-click or wheel handler \u2014 it
+  // must survive both.
   var curOverlay = '';
+  var curStrength = 45;
   var palH = 0, palS = 0, palV = 1;
+  var palStrength = 45; // the strength the next push applies, always 1-100
+  var palOn = false;    // false = palette mirrors "no overlay" (readout 0%)
   var palPushTimer = null;
 
   function hsvToHex(h, s, v) {
@@ -110754,23 +110811,35 @@ function buildPanelScript(apiPort, token) {
     $('zb-sv-knob').style.left = (palS * 100) + '%';
     $('zb-sv-knob').style.bottom = (palV * 100) + '%';
     var rgb = hexToRgb(hex);
+    $('zb-r').value = rgb[0];
+    $('zb-g').value = rgb[1];
+    $('zb-b').value = rgb[2];
     $('zb-swatch').style.backgroundColor = hex;
-    $('zb-pal-val').textContent = hex + ' (' + rgb.join(',') + ')';
+    // The readout shows what the palette would apply right now; with nothing
+    // active that is white at 0%. The strength control itself never goes
+    // below 1 \u2014 "off" lives in the overlay toggle, not in a 0% strength.
+    var pct = (palOn ? palStrength : 0) + '%';
+    $('zb-pal-val').textContent = hex + ' (' + rgb.join(',') + ') ' + pct;
+    $('zb-strength').value = palOn ? palStrength : 0;
+    $('zb-strength-val').textContent = pct;
     if (!push) return;
     clearTimeout(palPushTimer);
     palPushTimer = setTimeout(function () {
       var ov = $('zb-overlay');
       ov.textContent = '\u989C\u8272\u53E0\u52A0\u4E2D';
       ov.setAttribute('data-active', '1');
-      post('/api/config', { overlayColor: hex }, function () { status('\u989C\u8272\u53E0\u52A0\u5DF2\u5E94\u7528'); refresh(); });
+      post('/api/config', { overlayColor: hex, overlayStrength: palStrength }, function () { status('\u989C\u8272\u53E0\u52A0\u5DF2\u5E94\u7528'); refresh(); });
     }, 200);
   }
   function paletteOpen() { return !$('zb-palette').hidden; }
   function closePalette() { $('zb-palette').hidden = true; }
   function openPalette() {
-    var rgb = /^#[0-9a-fA-F]{6}$/.test(curOverlay) ? hexToRgb(curOverlay) : [255, 255, 255];
+    var active = /^#[0-9a-fA-F]{6}$/.test(curOverlay);
+    var rgb = active ? hexToRgb(curOverlay) : [255, 255, 255];
     var hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
     palH = hsv[0]; palS = hsv[1]; palV = hsv[2];
+    palOn = active;
+    palStrength = active ? Math.min(100, Math.max(1, Math.round(curStrength))) : 45;
     var pal = $('zb-palette'), panel = $('zb-panel'), btn = $('zb-overlay');
     palApply(false);
     pal.hidden = false;
@@ -110793,6 +110862,7 @@ function buildPanelScript(apiPort, token) {
     var r = sv.getBoundingClientRect();
     palS = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     palV = Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height));
+    palOn = true;
     palApply(true);
   }
   sv.addEventListener('pointerdown', function (e) {
@@ -110802,6 +110872,50 @@ function buildPanelScript(apiPort, token) {
   sv.addEventListener('pointermove', function (e) { if (e.buttons & 1) svPick(e); });
   $('zb-hue').addEventListener('input', function () {
     palH = Number(this.value);
+    palOn = true;
+    palApply(true);
+  });
+  // Quick picks: apply the preset color at the current strength.
+  var chips = document.querySelectorAll('#zb-palette .zb-sw');
+  for (var ci = 0; ci < chips.length; ci++) {
+    chips[ci].addEventListener('click', function () {
+      var rgb = hexToRgb(this.getAttribute('data-c'));
+      var hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+      palH = hsv[0]; palS = hsv[1]; palV = hsv[2];
+      palOn = true;
+      palApply(true);
+    });
+  }
+  // Manual RGB entry: clamp to 0-255 (junk and negatives never apply), then
+  // feed the same HSV state the pointer controls drive.
+  function clampByte(raw) {
+    if (raw === '' || raw === null) return null;
+    var v = Math.round(Number(raw));
+    if (!Number.isFinite(v)) return null;
+    return Math.min(255, Math.max(0, v));
+  }
+  function rgbInput() {
+    var r = clampByte($('zb-r').value), g = clampByte($('zb-g').value), b = clampByte($('zb-b').value);
+    if (r === null || g === null || b === null) return;
+    var hsv = rgbToHsv(r, g, b);
+    palH = hsv[0]; palS = hsv[1]; palV = hsv[2];
+    palOn = true;
+    palApply(true);
+  }
+  $('zb-r').addEventListener('input', rgbInput);
+  $('zb-g').addEventListener('input', rgbInput);
+  $('zb-b').addEventListener('input', rgbInput);
+  // The strength control never sets 0 (or below): 0% is the "no overlay"
+  // state, reachable only through \u91CD\u7F6E / right-click. Dragging up from the
+  // seeded 0 applies the shown color at the new strength.
+  $('zb-strength').addEventListener('input', function () {
+    var v = Math.round(Number(this.value));
+    if (!(v >= 1)) {
+      this.value = palOn ? palStrength : 0;
+      return;
+    }
+    palOn = true;
+    palStrength = Math.min(100, v);
     palApply(true);
   });
   $('zb-pal-reset').addEventListener('click', function () {
@@ -110997,6 +111111,7 @@ function publicConfig(config) {
     fit: config.fit,
     transparency: config.transparency,
     overlayColor: config.overlayColor ?? "",
+    overlayStrength: config.overlayStrength,
     wallpaperSet: Boolean(config.wallpaperPath && fs7.existsSync(config.wallpaperPath)),
     hasBackup: hasBackup(),
     cdpPort: config.port
@@ -111017,6 +111132,9 @@ function sanitize(body) {
   }
   if (typeof body?.overlayColor === "string" && /^$|^#[0-9a-fA-F]{6}$/.test(body.overlayColor)) {
     out.overlayColor = body.overlayColor;
+  }
+  if (typeof body?.overlayStrength === "number" && body.overlayStrength >= 1 && body.overlayStrength <= 100) {
+    out.overlayStrength = body.overlayStrength;
   }
   if (body?.fit === "cover" || body?.fit === "contain" || body?.fit === "smart")
     out.fit = body.fit;
@@ -111552,7 +111670,8 @@ Commands:
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
   colors [--port N] [--blur <px>] [--dim <0-100>] [--transparency <0-100>]
-         [--fit cover|contain|smart] [--overlay-color <#rrggbb|none>] [--no-monet]
+         [--fit cover|contain|smart] [--overlay-color <#rrggbb|none>]
+         [--overlay-strength <1-100>] [--no-monet]
                                  Re-apply stored theme and/or retune the look
   reset [--port N]               Remove wallpaper and color overrides
   status [--port N]              Show CDP reachability and renderer targets
@@ -111651,6 +111770,16 @@ Quit ZCode completely (including any tray icon), then run \`zcode-beautify launc
             return;
           }
         }
+        const rawStrength = flag("--overlay-strength");
+        let overlayStrength;
+        if (rawStrength !== void 0) {
+          overlayStrength = Number(rawStrength);
+          if (!Number.isFinite(overlayStrength) || overlayStrength < 1 || overlayStrength > 100) {
+            console.error(`Invalid --overlay-strength "${rawStrength}". Use a number from 1 to 100 (0% means "no overlay" \u2014 clear it with --overlay-color none instead).`);
+            process.exitCode = 1;
+            return;
+          }
+        }
         const fit = flag("--fit");
         if (fit && !["cover", "contain", "smart"].includes(fit)) {
           console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
@@ -111665,7 +111794,8 @@ Quit ZCode completely (including any tray icon), then run \`zcode-beautify launc
           dim: rawDim !== void 0 ? Number(rawDim) : void 0,
           monet: has("--no-monet") ? false : void 0,
           fit,
-          overlayColor
+          overlayColor,
+          overlayStrength
         });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;

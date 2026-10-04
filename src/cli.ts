@@ -31,7 +31,8 @@ Commands:
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
   colors [--port N] [--blur <px>] [--dim <0-100>] [--transparency <0-100>]
-         [--fit cover|contain|smart] [--overlay-color <#rrggbb|none>] [--no-monet]
+         [--fit cover|contain|smart] [--overlay-color <#rrggbb|none>]
+         [--overlay-strength <1-100>] [--no-monet]
                                  Re-apply stored theme and/or retune the look
   reset [--port N]               Remove wallpaper and color overrides
   status [--port N]              Show CDP reachability and renderer targets
@@ -135,6 +136,19 @@ async function main(): Promise<void> {
             return;
           }
         }
+        const rawStrength = flag("--overlay-strength");
+        let overlayStrength: number | undefined;
+        if (rawStrength !== undefined) {
+          overlayStrength = Number(rawStrength);
+          if (!Number.isFinite(overlayStrength) || overlayStrength < 1 || overlayStrength > 100) {
+            console.error(
+              `Invalid --overlay-strength "${rawStrength}". Use a number from 1 to 100 ` +
+                `(0% means "no overlay" — clear it with --overlay-color none instead).`
+            );
+            process.exitCode = 1;
+            return;
+          }
+        }
         const fit = flag("--fit");
         if (fit && !["cover", "contain", "smart"].includes(fit)) {
           console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
@@ -150,6 +164,7 @@ async function main(): Promise<void> {
           monet: has("--no-monet") ? false : undefined,
           fit: fit as ApplyOptions["fit"],
           overlayColor,
+          overlayStrength,
         });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;

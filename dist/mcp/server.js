@@ -144509,6 +144509,8 @@ function tokenRows(theme, mode, opts) {
 }
 
 // dist/core/inject.js
+var BLUR_DAMPING = 0.3;
+var DEFAULT_OVERLAY_STRENGTH = 45;
 var DEFAULT_CONFIG = {
   port: 9222,
   blur: 0,
@@ -144517,20 +144519,23 @@ var DEFAULT_CONFIG = {
   wallpaperVisible: true,
   fit: "cover",
   transparency: 50,
-  overlayColor: ""
+  overlayColor: "",
+  overlayStrength: DEFAULT_OVERLAY_STRENGTH
 };
+function normalizeStrength(value) {
+  const n2 = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : DEFAULT_OVERLAY_STRENGTH;
+  return Math.min(100, Math.max(1, n2));
+}
 function hexRgba(hex3, alpha) {
   const n2 = parseInt(hex3.slice(1), 16);
   return `rgb(${n2 >> 16 & 255} ${n2 >> 8 & 255} ${n2 & 255} / ${alpha})`;
 }
-function buildPayload(config2, assets) {
-  const parts = [];
-  const resolved = config2.fit === "smart" ? assets?.focus.fit ?? "cover" : config2.fit === "contain" ? "contain" : "cover";
-  const focusX = config2.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
-  const focusY = config2.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
-  const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
-  parts.push(`
-html, body { background: transparent !important; }
+function pageTransparentCss() {
+  return `
+html, body { background: transparent !important; }`;
+}
+function backdropLayerCss() {
+  return `
 #zcode-beautify-backdrop {
   position: fixed;
   inset: 0;
@@ -144543,11 +144548,12 @@ html, body { background: transparent !important; }
   transform: scale(1.12);
   display: none;
 }
-#zcode-beautify-backdrop[data-on="1"] { display: block; }`);
-  if (config2.wallpaperVisible) {
-    const effectiveBlur = config2.blur > 0 ? (config2.blur * 0.3).toFixed(2) : "0";
-    const overlay2 = config2.overlayColor ? hexRgba(config2.overlayColor, 0.45) : "";
-    parts.push(`
+#zcode-beautify-backdrop[data-on="1"] { display: block; }`;
+}
+function wallpaperLayerCss(config2, resolved, position) {
+  const effectiveBlur = config2.blur > 0 ? (config2.blur * BLUR_DAMPING).toFixed(2) : "0";
+  const overlay2 = config2.overlayColor ? hexRgba(config2.overlayColor, normalizeStrength(config2.overlayStrength) / 100) : "";
+  return `
 :root { --zcode-beautify-blur: blur(${effectiveBlur}px); --zcode-beautify-dim: ${config2.dim / 100}; }
 #zcode-beautify-wallpaper {
   position: fixed;
@@ -144570,7 +144576,18 @@ html, body { background: transparent !important; }
   inset: 0;
   background-color: rgb(0 0 0 / var(--zcode-beautify-dim));${overlay2 ? `
   background-image: linear-gradient(${overlay2}, ${overlay2});` : ""}
-}`);
+}`;
+}
+function buildPayload(config2, assets) {
+  const parts = [];
+  const resolved = config2.fit === "smart" ? assets?.focus.fit ?? "cover" : config2.fit === "contain" ? "contain" : "cover";
+  const focusX = config2.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
+  const focusY = config2.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
+  const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
+  parts.push(pageTransparentCss());
+  parts.push(backdropLayerCss());
+  if (config2.wallpaperVisible) {
+    parts.push(wallpaperLayerCss(config2, resolved, position));
   }
   if (assets) {
     if (config2.monet) {
@@ -144747,7 +144764,8 @@ async function applyWallpaper(imagePath, opts) {
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
     transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
-    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
+    overlayStrength: opts.overlayStrength ?? stored.overlayStrength ?? DEFAULT_CONFIG.overlayStrength
   };
   fs4.mkdirSync(dataDir(), { recursive: true });
   const dest = path2.join(dataDir(), "wallpaper" + path2.extname(abs).toLowerCase());
@@ -144771,7 +144789,8 @@ async function applyColorsOnly(opts) {
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
     transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
-    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
+    overlayStrength: opts.overlayStrength ?? stored.overlayStrength ?? DEFAULT_CONFIG.overlayStrength
   };
   saveConfig(config2);
   return applyToZCode(config2, await buildPayloadFromConfig(config2));
@@ -145153,7 +145172,7 @@ async function repairLaunchers(opts) {
 // dist/mcp/server.js
 var server = new McpServer({
   name: "zcode-beautify",
-  version: "0.7.1"
+  version: "0.7.2"
 });
 server.registerTool("set_background", {
   title: "Set ZCode wallpaper",
@@ -145175,7 +145194,7 @@ server.registerTool("set_background", {
 });
 server.registerTool("apply_options", {
   title: "Tune ZCode appearance",
-  description: "Adjust the live ZCode appearance without changing the wallpaper: blur radius, dim level, Monet dynamic colors on/off, and wallpaper visibility (translucent vs opaque surfaces). Only the provided values change; the rest keep their current setting.",
+  description: "Adjust the live ZCode appearance without changing the wallpaper: blur radius, dim level, Monet dynamic colors on/off, wallpaper visibility (translucent vs opaque surfaces), and the wallpaper color overlay (color + strength). Only the provided values change; the rest keep their current setting.",
   inputSchema: {
     blur: external_exports.number().min(0).max(100).optional().describe("Wallpaper blur radius in px"),
     dim: external_exports.number().min(0).max(100).optional().describe("Wallpaper darkening 0-100"),
@@ -145183,11 +145202,12 @@ server.registerTool("apply_options", {
     wallpaper_visible: external_exports.boolean().optional().describe("Translucent surfaces showing the wallpaper (true) or opaque surfaces (false)"),
     fit: external_exports.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point"),
     transparency: external_exports.number().min(0).max(100).optional().describe("Overall UI surface translucency 0-100 (50 = the shipped look; lower = more opaque, higher = more see-through)"),
-    overlay_color: external_exports.string().optional().describe("Blend a color over the wallpaper, hex like '#4b6cb7'; pass an empty string to clear the overlay")
+    overlay_color: external_exports.string().optional().describe("Blend a color over the wallpaper, hex like '#4b6cb7'; pass an empty string to clear the overlay"),
+    overlay_strength: external_exports.number().min(1).max(100).optional().describe("Overlay tint strength in percent (1-100); 0% means 'no overlay', which is overlay_color: '' \u2014 not a strength")
   }
-}, async ({ blur, dim, monet, wallpaper_visible, fit, transparency, overlay_color }) => {
+}, async ({ blur, dim, monet, wallpaper_visible, fit, transparency, overlay_color, overlay_strength }) => {
   try {
-    const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency, overlayColor: overlay_color });
+    const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency, overlayColor: overlay_color, overlayStrength: overlay_strength });
     return { content: [{ type: "text", text: `Appearance updated in ${windows} window(s).` }] };
   } catch (err) {
     return { content: [{ type: "text", text: `Failed: ${err.message}` }], isError: true };

@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.7.2
+
+The palette grows quick picks, an adjustable overlay strength, and manual RGB
+entry.
+
+### Added
+
+- **Quick color picks** — ten preset chips (white, black, red, orange, yellow,
+  green, cyan, blue, purple, pink) inside the palette; one click applies the
+  preset at the current strength. Nothing is remembered beyond the live config.
+- **Adjustable overlay strength** — a 强度 slider (1-100%) replaces the fixed
+  45% tint. It can never be set to 0% (or negative): "no overlay" is the
+  overlay toggle / 重置 / right-click, not a strength. With nothing active the
+  palette shows white at 0% and dragging the slider applies the shown color at
+  the new strength. Exposed as `overlay_strength` on `apply_options` and
+  `--overlay-strength <1-100>` on the CLI; the server rejects 0/negative.
+- **Manual RGB entry** — three small inputs (R/G/B) in the palette, clamped to
+  0-255; typing applies through the same path as picking.
+
+### Changed
+
+- The palette readout now includes the strength: `#RRGGBB (R,G,B) S%`, e.g.
+  `#FFFFFF (255,255,255) 0%` when no overlay is active.
+- Internal refactor of the payload assembly (named constants, small pure
+  helpers for the page/backdrop/wallpaper CSS blocks) — emitted CSS is
+  unchanged apart from the strength value.
+
 ## v0.7.1
 
 The overlay color picker becomes a proper in-panel palette.
