@@ -61,7 +61,7 @@ async function readImage(imagePath: string) {
     );
   }
 }
-const DECODE_TIMEOUT_MS = 30_000;
+const DECODE_TIMEOUT_MS = 60_000;
 
 export async function loadWallpaper(imagePath: string, maxDimension = MAX_WIDTH): Promise<WallpaperAssets> {
   const image = await readImage(imagePath);

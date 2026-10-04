@@ -144339,7 +144339,7 @@ async function readImage(imagePath) {
     throw new Error(`Cannot decode image "${imagePath}": ${err.message}. Supported formats: JPEG, PNG, BMP, GIF, TIFF (WebP is not supported).`);
   }
 }
-var DECODE_TIMEOUT_MS = 3e4;
+var DECODE_TIMEOUT_MS = 6e4;
 async function loadWallpaper(imagePath, maxDimension = MAX_WIDTH) {
   const image2 = await readImage(imagePath);
   const { width, height } = image2.bitmap;

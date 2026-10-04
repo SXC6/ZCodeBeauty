@@ -109682,7 +109682,7 @@ var init_monet = __esm({
     init_material_color_utilities();
     MAX_WIDTH = 2560;
     JPEG_QUALITY = 82;
-    DECODE_TIMEOUT_MS = 3e4;
+    DECODE_TIMEOUT_MS = 6e4;
   }
 });
 
@@ -110797,11 +110797,37 @@ function buildPanelScript(apiPort, token) {
     if (!f) return;
     if (f.type === 'image/webp') { status('\u6682\u4E0D\u652F\u6301 WebP,\u8BF7\u6539\u7528 JPG \u6216 PNG'); return; }
     if (f.size > 20 * 1024 * 1024) { status('\u56FE\u7247\u8FC7\u5927,\u4E0A\u9650 20 MB'); return; }
-    var fr = new FileReader();
-    fr.onload = function () {
-      post('/api/wallpaper', { dataUri: fr.result, name: f.name }, function () { status('\u58C1\u7EB8\u5DF2\u66F4\u65B0 updated'); });
+    status('\u8BFB\u53D6\u56FE\u7247\u4E2D\u2026');
+    var send = function (dataUri, name) {
+      post('/api/wallpaper', { dataUri: dataUri, name: name }, function () { status('\u58C1\u7EB8\u5DF2\u66F4\u65B0 updated'); });
     };
-    fr.readAsDataURL(f);
+    // Small files go up as-is. Big ones are downscaled in-page first (canvas,
+    // \u22642560px, JPEG q92): a 4K original is ~18 MB of base64 and the local
+    // decoder grinds on it for tens of seconds with the API unresponsive \u2014
+    // while the injection only ever uses a \u22642560 re-encode, so nothing is lost.
+    if (f.size <= 4 * 1024 * 1024) {
+      var fr = new FileReader();
+      fr.onload = function () { send(fr.result, f.name); };
+      fr.readAsDataURL(f);
+      return;
+    }
+    var img = new Image();
+    var url = URL.createObjectURL(f);
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var MAXP = 2560;
+      var scale = Math.min(1, MAXP / Math.max(img.naturalWidth, img.naturalHeight));
+      var w = Math.max(1, Math.round(img.naturalWidth * scale));
+      var h = Math.max(1, Math.round(img.naturalHeight * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      status('\u5927\u56FE\u5DF2\u538B\u7F29,\u5E94\u7528\u4E2D\u2026');
+      send(canvas.toDataURL('image/jpeg', 0.92), (f.name || 'wallpaper').replace(/.[^.]+$/, '') + '.jpg');
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); status('\u56FE\u7247\u8BFB\u53D6\u5931\u8D25,\u8BF7\u6362\u4E00\u5F20\u8BD5\u8BD5'); };
+    img.src = url;
   });
 
   // Custom palette state. curOverlay/curStrength mirror the stored config

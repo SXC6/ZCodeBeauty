@@ -380,11 +380,37 @@ export function buildPanelScript(apiPort: number, token: string): string {
     if (!f) return;
     if (f.type === 'image/webp') { status('暂不支持 WebP,请改用 JPG 或 PNG'); return; }
     if (f.size > 20 * 1024 * 1024) { status('图片过大,上限 20 MB'); return; }
-    var fr = new FileReader();
-    fr.onload = function () {
-      post('/api/wallpaper', { dataUri: fr.result, name: f.name }, function () { status('壁纸已更新 updated'); });
+    status('读取图片中…');
+    var send = function (dataUri, name) {
+      post('/api/wallpaper', { dataUri: dataUri, name: name }, function () { status('壁纸已更新 updated'); });
     };
-    fr.readAsDataURL(f);
+    // Small files go up as-is. Big ones are downscaled in-page first (canvas,
+    // ≤2560px, JPEG q92): a 4K original is ~18 MB of base64 and the local
+    // decoder grinds on it for tens of seconds with the API unresponsive —
+    // while the injection only ever uses a ≤2560 re-encode, so nothing is lost.
+    if (f.size <= 4 * 1024 * 1024) {
+      var fr = new FileReader();
+      fr.onload = function () { send(fr.result, f.name); };
+      fr.readAsDataURL(f);
+      return;
+    }
+    var img = new Image();
+    var url = URL.createObjectURL(f);
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var MAXP = 2560;
+      var scale = Math.min(1, MAXP / Math.max(img.naturalWidth, img.naturalHeight));
+      var w = Math.max(1, Math.round(img.naturalWidth * scale));
+      var h = Math.max(1, Math.round(img.naturalHeight * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      status('大图已压缩,应用中…');
+      send(canvas.toDataURL('image/jpeg', 0.92), (f.name || 'wallpaper').replace(/\.[^.]+$/, '') + '.jpg');
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); status('图片读取失败,请换一张试试'); };
+    img.src = url;
   });
 
   // Custom palette state. curOverlay/curStrength mirror the stored config
