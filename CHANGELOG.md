@@ -19,10 +19,29 @@ A gentler blur algorithm and a wallpaper color overlay.
 - **The blur slider is damped**: the actual Gaussian radius is the slider value
   × 0.3. A full-screen blur reads far stronger than its nominal radius, so the
   old 1px step was already heavy; the slider now sweeps the subtle range first.
-- **Removed the 4% scale-up while blurred.** The blur fringe toward the screen
-  edges is now hidden by a constant 32px off-screen bleed (applied only while
-  blurred), so toggling blur no longer zooms or re-frames the picture. Stale
-  inline filter/transform from previous injections are cleared on re-inject.
+- **Blur can no longer change the wallpaper's framing.** The 32px off-screen
+  bleed used to hide the fringe rescaled `background-size: cover` and zoomed
+  the picture by several percent whenever blur > 0. The blur now runs as a
+  `backdrop-filter` frost on a full-viewport `::before` above the picture —
+  which blurs cleanly out to the viewport edge in this Chromium — so the
+  wallpaper box stays at `inset: 0` and the framing is pixel-identical whether
+  the slider is 0 or 30. The color overlay moved onto `::after` (dim + tint),
+  and the panel previews blur/dim through CSS variables instead of inline
+  filter styles. Stale inline filter/transform are still cleared on re-inject.
+
+### Fixed
+
+- **The 2×2 action buttons rendered unevenly.** The native `appearance:
+  button` gave the two `<button>`s a taller intrinsic content box than the
+  sibling label (34.5px vs 30.5px), and the slider-row label rule leaked onto
+  the 更换图片 label (flex/space-between, extra bottom margin, dimmed text).
+  Grid buttons now opt out of native appearance and the label rule is scoped
+  with `:not(.zb-grid)` — all four measure the same.
+- **A push before the panel's first load could wipe settings.** Controls start
+  at neutral defaults and are filled from the stored config by an async
+  refresh; a slider input in that window posted the defaults (dim 0, etc.),
+  overwriting real values. Pushes now wait for the first successful load and
+  flush the touched control right after.
 
 ## v0.6.2
 

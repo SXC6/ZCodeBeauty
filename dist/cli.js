@@ -106,6 +106,11 @@ function buildBootstrapScript(payload) {
   }
   style.textContent = ${JSON.stringify(payload.css)};
 
+  // The panel's live preview parks its values in inline variables on <html>;
+  // drop them so the freshly injected :root rule is authoritative again.
+  document.documentElement.style.removeProperty('--zcode-beautify-blur');
+  document.documentElement.style.removeProperty('--zcode-beautify-dim');
+
   var wp = document.getElementById(MARKER + '-wallpaper');
   if (${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
     if (!wp) {
@@ -109777,25 +109782,18 @@ var init_tokens = __esm({
 });
 
 // dist/core/inject.js
+function hexRgba(hex, alpha) {
+  const n2 = parseInt(hex.slice(1), 16);
+  return `rgb(${n2 >> 16 & 255} ${n2 >> 8 & 255} ${n2 & 255} / ${alpha})`;
+}
 function buildPayload(config, assets) {
   const parts = [];
   const resolved = config.fit === "smart" ? assets?.focus.fit ?? "cover" : config.fit === "contain" ? "contain" : "cover";
   const focusX = config.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
   const focusY = config.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
-  const effectiveBlur = config.blur > 0 ? (config.blur * 0.3).toFixed(2) : "";
   parts.push(`
 html, body { background: transparent !important; }
-#zcode-beautify-wallpaper {
-  position: fixed;
-  inset: ${config.blur > 0 ? "-32px" : "0"};
-  z-index: -2147483646;
-  background-size: ${resolved};
-  background-position: ${resolved === "contain" ? "center" : position};
-  background-repeat: no-repeat;
-  pointer-events: none;
-  ${effectiveBlur ? `filter: blur(${effectiveBlur}px);` : "filter: none;"}
-}
 #zcode-beautify-backdrop {
   position: fixed;
   inset: 0;
@@ -109809,21 +109807,32 @@ html, body { background: transparent !important; }
   display: none;
 }
 #zcode-beautify-backdrop[data-on="1"] { display: block; }`);
-  if (config.dim > 0) {
-    parts.push(`#zcode-beautify-wallpaper::after {
+  if (config.wallpaperVisible) {
+    const effectiveBlur = config.blur > 0 ? (config.blur * 0.3).toFixed(2) : "0";
+    const overlay2 = config.overlayColor ? hexRgba(config.overlayColor, 0.45) : "";
+    parts.push(`
+:root { --zcode-beautify-blur: blur(${effectiveBlur}px); --zcode-beautify-dim: ${config.dim / 100}; }
+#zcode-beautify-wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -2147483646;
+  background-size: ${resolved};
+  background-position: ${resolved === "contain" ? "center" : position};
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+#zcode-beautify-wallpaper::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / var(--zcode-beautify-dim, ${config.dim / 100}));
-}`);
-  }
-  if (config.wallpaperVisible && config.overlayColor) {
-    parts.push(`#zcode-beautify-wallpaper::before {
+  backdrop-filter: var(--zcode-beautify-blur);
+}
+#zcode-beautify-wallpaper::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: ${config.overlayColor};
-  opacity: 0.45;
+  background-color: rgb(0 0 0 / var(--zcode-beautify-dim));${overlay2 ? `
+  background-image: linear-gradient(${overlay2}, ${overlay2});` : ""}
 }`);
   }
   if (assets) {
@@ -110418,13 +110427,17 @@ function buildPanelScript(apiPort, token) {
     '#zb-close { cursor: pointer; opacity: .7; padding: 0 4px; } #zb-close:hover { opacity: 1; }',
     '#zb-body { padding: 10px 12px 0; }',
     '.zb-row { margin-bottom: 10px; }',
-    '.zb-row label { display: flex; justify-content: space-between; margin-bottom: 4px; opacity: .85; }',
+    // :not(.zb-grid) \u2014 the grid's \u66F4\u6362\u56FE\u7247 label is a .zb-btn pill; the
+    // slider-label layout (flex/space-between/margin) must not leak onto it.
+    '.zb-row:not(.zb-grid) label { display: flex; justify-content: space-between; margin-bottom: 4px; opacity: .85; }',
     '#zb-panel input[type=range] { width: 100%; accent-color: #7aa2f7; height: 18px; margin: 0; cursor: pointer; }',
     '.zb-toggles { display: flex; justify-content: center; gap: 16px; }',
     '.zb-toggles label { display: flex; align-items: center; gap: 5px; margin: 0; cursor: pointer; }',
     '.zb-actions { display: flex; justify-content: center; gap: 10px; }',
     '.zb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 6px; }',
-    '.zb-grid .zb-btn { padding: 6px 2px; font-size: 11px; }',
+    // appearance: none \u2014 a native button carries a taller intrinsic content
+    // box than the sibling label, which made the grid rows unequal.
+    '.zb-grid .zb-btn { padding: 6px 2px; font-size: 11px; appearance: none; }',
     '#zb-overlay[data-active="1"] { background: rgba(122,162,247,.30); border-color: rgba(122,162,247,.75); }',
     '.zb-btn { display: inline-block; padding: 6px 20px; text-align: center; border-radius: 999px; cursor: pointer;',
       ' background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.14); color: inherit; font-size: 12px; }',
@@ -110527,16 +110540,26 @@ function buildPanelScript(apiPort, token) {
   }
 
   // Local live preview; the server re-injects the authoritative CSS right after.
+  // The blur and dim layers read :root variables, so previewing means setting
+  // them \u2014 an inline filter on the wallpaper box itself would blur the box's
+  // own edges and change its rendering.
   function preview() {
     var w = wallpaperEl(); if (!w) return;
     var b = Number($('zb-blur').value), d = Number($('zb-dim').value);
-    w.style.filter = b > 0 ? 'blur(' + (b * 0.3).toFixed(2) + 'px)' : 'none';
-    w.style.transform = '';
+    w.style.filter = ''; w.style.transform = '';
+    document.documentElement.style.setProperty('--zcode-beautify-blur', 'blur(' + (b * 0.3).toFixed(2) + 'px)');
     document.documentElement.style.setProperty('--zcode-beautify-dim', String(d / 100));
   }
 
+  // Controls start at neutral defaults until the first successful refresh
+  // fills them from the stored config. A push before that (a drag in the
+  // panel's first moments) would overwrite real settings with the defaults,
+  // so pushes wait for the first load and the touched control is flushed then.
+  var loaded = false;
+  var pendingPush = false;
   var pushTimer = null;
   function pushConfig() {
+    if (!loaded) { pendingPush = true; return; }
     clearTimeout(pushTimer);
     pushTimer = setTimeout(function () {
       post('/api/config', {
@@ -110621,6 +110644,8 @@ function buildPanelScript(apiPort, token) {
           resetBtn.setAttribute('data-mode', 'reset');
           resetBtn.title = '\u5F53\u524D\u5DF2\u662F\u9ED8\u8BA4\u5916\u89C2';
         }
+        loaded = true;
+        if (pendingPush) { pendingPush = false; pushConfig(); }
       })
       .catch(function () { setOffline(true); });
   }

@@ -66104,6 +66104,11 @@ function buildBootstrapScript(payload) {
   }
   style.textContent = ${JSON.stringify(payload.css)};
 
+  // The panel's live preview parks its values in inline variables on <html>;
+  // drop them so the freshly injected :root rule is authoritative again.
+  document.documentElement.style.removeProperty('--zcode-beautify-blur');
+  document.documentElement.style.removeProperty('--zcode-beautify-dim');
+
   var wp = document.getElementById(MARKER + '-wallpaper');
   if (${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
     if (!wp) {
@@ -144514,25 +144519,18 @@ var DEFAULT_CONFIG = {
   transparency: 50,
   overlayColor: ""
 };
+function hexRgba(hex3, alpha) {
+  const n2 = parseInt(hex3.slice(1), 16);
+  return `rgb(${n2 >> 16 & 255} ${n2 >> 8 & 255} ${n2 & 255} / ${alpha})`;
+}
 function buildPayload(config2, assets) {
   const parts = [];
   const resolved = config2.fit === "smart" ? assets?.focus.fit ?? "cover" : config2.fit === "contain" ? "contain" : "cover";
   const focusX = config2.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
   const focusY = config2.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
-  const effectiveBlur = config2.blur > 0 ? (config2.blur * 0.3).toFixed(2) : "";
   parts.push(`
 html, body { background: transparent !important; }
-#zcode-beautify-wallpaper {
-  position: fixed;
-  inset: ${config2.blur > 0 ? "-32px" : "0"};
-  z-index: -2147483646;
-  background-size: ${resolved};
-  background-position: ${resolved === "contain" ? "center" : position};
-  background-repeat: no-repeat;
-  pointer-events: none;
-  ${effectiveBlur ? `filter: blur(${effectiveBlur}px);` : "filter: none;"}
-}
 #zcode-beautify-backdrop {
   position: fixed;
   inset: 0;
@@ -144546,21 +144544,32 @@ html, body { background: transparent !important; }
   display: none;
 }
 #zcode-beautify-backdrop[data-on="1"] { display: block; }`);
-  if (config2.dim > 0) {
-    parts.push(`#zcode-beautify-wallpaper::after {
+  if (config2.wallpaperVisible) {
+    const effectiveBlur = config2.blur > 0 ? (config2.blur * 0.3).toFixed(2) : "0";
+    const overlay2 = config2.overlayColor ? hexRgba(config2.overlayColor, 0.45) : "";
+    parts.push(`
+:root { --zcode-beautify-blur: blur(${effectiveBlur}px); --zcode-beautify-dim: ${config2.dim / 100}; }
+#zcode-beautify-wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -2147483646;
+  background-size: ${resolved};
+  background-position: ${resolved === "contain" ? "center" : position};
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+#zcode-beautify-wallpaper::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / var(--zcode-beautify-dim, ${config2.dim / 100}));
-}`);
-  }
-  if (config2.wallpaperVisible && config2.overlayColor) {
-    parts.push(`#zcode-beautify-wallpaper::before {
+  backdrop-filter: var(--zcode-beautify-blur);
+}
+#zcode-beautify-wallpaper::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: ${config2.overlayColor};
-  opacity: 0.45;
+  background-color: rgb(0 0 0 / var(--zcode-beautify-dim));${overlay2 ? `
+  background-image: linear-gradient(${overlay2}, ${overlay2});` : ""}
 }`);
   }
   if (assets) {

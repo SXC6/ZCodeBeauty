@@ -44,6 +44,12 @@ export interface BuiltPayload {
   focusY: number;
 }
 
+/** "#rrggbb" → "rgb(r g b / a)"; sanitize already constrains the shape. */
+function hexRgba(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255} / ${alpha})`;
+}
+
 export function buildPayload(config: BeautifyConfig, assets?: WallpaperAssets): BuiltPayload {
   const parts: string[] = [];
 
@@ -56,24 +62,15 @@ export function buildPayload(config: BeautifyConfig, assets?: WallpaperAssets): 
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
 
   // A full-screen Gaussian reads much stronger than its nominal radius, so the
-  // slider value is damped (1 → 0.30px). The blur filter fringes toward
-  // transparency at the element edges; instead of the old 4% scale step (which
-  // read as a framing change when toggling blur), the layer bleeds 32px beyond
-  // the viewport so the fringe falls off-screen — only while blurred, and the
-  // damped maximum (30 × 0.3 = 9px σ ≈ 27px fringe) stays covered.
-  const effectiveBlur = config.blur > 0 ? (config.blur * 0.3).toFixed(2) : "";
+  // slider value is damped (1 → 0.30px). The blur never touches the wallpaper
+  // box: it runs as a backdrop-filter frost on a full-viewport ::before above
+  // the picture, which this Chromium blurs cleanly out to the viewport edge,
+  // so the framing is pixel-identical whether the slider is 0 or 30. Both
+  // earlier tricks — a 4% scale, then a 32px inset bleed to push the fringe
+  // off-screen — rescaled background-size: cover and read as a zoom. The layer
+  // values ride on :root variables so the settings panel can preview live.
   parts.push(`
 html, body { background: transparent !important; }
-#zcode-beautify-wallpaper {
-  position: fixed;
-  inset: ${config.blur > 0 ? "-32px" : "0"};
-  z-index: -2147483646;
-  background-size: ${resolved};
-  background-position: ${resolved === "contain" ? "center" : position};
-  background-repeat: no-repeat;
-  pointer-events: none;
-  ${effectiveBlur ? `filter: blur(${effectiveBlur}px);` : "filter: none;"}
-}
 #zcode-beautify-backdrop {
   position: fixed;
   inset: 0;
@@ -87,21 +84,35 @@ html, body { background: transparent !important; }
   display: none;
 }
 #zcode-beautify-backdrop[data-on="1"] { display: block; }`);
-  if (config.dim > 0) {
-    parts.push(`#zcode-beautify-wallpaper::after {
+  if (config.wallpaperVisible) {
+    const effectiveBlur = config.blur > 0 ? (config.blur * 0.3).toFixed(2) : "0";
+    // The overlay tint blends onto the blurred picture; baking the alpha into
+    // the color frees ::before for the blur layer.
+    const overlay = config.overlayColor ? hexRgba(config.overlayColor, 0.45) : "";
+    parts.push(`
+:root { --zcode-beautify-blur: blur(${effectiveBlur}px); --zcode-beautify-dim: ${config.dim / 100}; }
+#zcode-beautify-wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -2147483646;
+  background-size: ${resolved};
+  background-position: ${resolved === "contain" ? "center" : position};
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+#zcode-beautify-wallpaper::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / var(--zcode-beautify-dim, ${config.dim / 100}));
-}`);
+  backdrop-filter: var(--zcode-beautify-blur);
+}
+#zcode-beautify-wallpaper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgb(0 0 0 / var(--zcode-beautify-dim));${
+    overlay ? `\n  background-image: linear-gradient(${overlay}, ${overlay});` : ""
   }
-  if (config.wallpaperVisible && config.overlayColor) {
-    parts.push(`#zcode-beautify-wallpaper::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: ${config.overlayColor};
-  opacity: 0.45;
 }`);
   }
 

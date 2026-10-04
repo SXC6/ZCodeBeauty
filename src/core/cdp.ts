@@ -157,6 +157,11 @@ export function buildBootstrapScript(payload: InjectionPayload): string {
   }
   style.textContent = ${JSON.stringify(payload.css)};
 
+  // The panel's live preview parks its values in inline variables on <html>;
+  // drop them so the freshly injected :root rule is authoritative again.
+  document.documentElement.style.removeProperty('--zcode-beautify-blur');
+  document.documentElement.style.removeProperty('--zcode-beautify-dim');
+
   var wp = document.getElementById(MARKER + '-wallpaper');
   if (${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
     if (!wp) {
