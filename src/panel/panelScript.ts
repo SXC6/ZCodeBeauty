@@ -53,6 +53,28 @@ export function buildPanelScript(apiPort: number, token: string): string {
     // box than the sibling label, which made the grid rows unequal.
     '.zb-grid .zb-btn { padding: 6px 2px; font-size: 11px; appearance: none; }',
     '#zb-overlay[data-active="1"] { background: rgba(122,162,247,.30); border-color: rgba(122,162,247,.75); }',
+    // Custom palette: the native <input type=color> popup closes on any outside
+    // click or wheel tick and cannot be positioned, so the picker is DOM of our
+    // own — docked left of the panel, outside it, never overlapping.
+    '#zb-palette { position: absolute; z-index: 3; width: 190px; padding: 10px;',
+      ' background: rgba(24,24,30,.97); border: 1px solid rgba(255,255,255,.16); border-radius: 10px;',
+      ' box-shadow: 0 8px 32px rgba(0,0,0,.5); }',
+    '#zb-palette[hidden] { display: none; }',
+    '#zb-sv { position: relative; height: 130px; border-radius: 6px; cursor: crosshair; overflow: hidden;',
+      ' touch-action: none;',
+      ' background-image: linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0)); }',
+    '#zb-sv-knob { position: absolute; width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%;',
+      ' box-shadow: 0 0 4px rgba(0,0,0,.6); transform: translate(-50%, 50%); pointer-events: none; }',
+    '#zb-hue { width: 100%; margin: 8px 0 0; height: 14px; border-radius: 7px; cursor: pointer; appearance: none;',
+      ' background-image: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);',
+      ' border: 1px solid rgba(255,255,255,.2); }',
+    '#zb-hue::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff;',
+      ' border: 2px solid rgba(0,0,0,.35); box-shadow: 0 0 4px rgba(0,0,0,.4); }',
+    '#zb-pal-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }',
+    '#zb-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); flex: none; }',
+    '#zb-pal-val { opacity: .85; white-space: nowrap; }',
+    '.zb-pal-actions { display: flex; gap: 8px; margin-top: 9px; }',
+    '.zb-pal-actions .zb-btn { flex: 1; padding: 5px 0; font-size: 11px; appearance: none; }',
     '.zb-btn { display: inline-block; padding: 6px 20px; text-align: center; border-radius: 999px; cursor: pointer;',
       ' background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.14); color: inherit; font-size: 12px; }',
     '.zb-btn:hover { background: rgba(255,255,255,.16); }',
@@ -113,8 +135,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '      <button class="zb-btn" id="zb-fit" title="背景填充方式:填满裁剪铺满窗口 / 完整显示不裁剪(模糊垫底)/ 智能适配自动分析画面主体">背景填充: …</button>' +
     '      <label class="zb-btn" for="zb-file" title="选择一张图片作为背景壁纸,UI 配色随之更新(支持 JPG/PNG/GIF/BMP,不支持 WebP)">更换图片…</label>' +
     '      <input type="file" id="zb-file" accept="image/jpeg,image/png,image/gif,image/bmp" hidden>' +
-    '      <button class="zb-btn" id="zb-overlay" title="选一个颜色叠加到壁纸上;再次左键换色,右键取消叠加">叠加颜色</button>' +
-    '      <input type="color" id="zb-color" value="#4b6cb7" style="display:none">' +
+    '      <button class="zb-btn" id="zb-overlay" title="选一个颜色叠加到壁纸上;调色板里可重置或关闭,右键按钮直接取消叠加">叠加颜色</button>' +
     '      <button class="zb-btn" id="zb-reset" title="移除壁纸与配色,还原 ZCode 默认外观(壁纸会被记住,可再次恢复)">还原默认外观</button>' +
     '    </div>' +
     '    <div class="zb-row" style="border-top:1px solid rgba(255,255,255,.1);padding-top:8px">' +
@@ -125,6 +146,15 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '        <option value="always">后台常驻(可用本面板)</option>' +
     '      </select>' +
     '      <div id="zb-recovery-hint"></div>' +
+    '    </div>' +
+    '  </div>' +
+    '  <div id="zb-palette" hidden>' +
+    '    <div id="zb-sv"><div id="zb-sv-knob"></div></div>' +
+    '    <input type="range" id="zb-hue" min="0" max="360" step="1" value="0">' +
+    '    <div id="zb-pal-row"><span id="zb-swatch"></span><span id="zb-pal-val"></span></div>' +
+    '    <div class="zb-pal-actions">' +
+    '      <button class="zb-btn" id="zb-pal-reset">重置</button>' +
+    '      <button class="zb-btn" id="zb-pal-close">关闭</button>' +
     '    </div>' +
     '  </div>' +
     '</div>' +
@@ -241,6 +271,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
         var ov = $('zb-overlay');
         if (ov) {
           var active = typeof c.overlayColor === 'string' && c.overlayColor !== '';
+          curOverlay = active ? c.overlayColor : '';
           ov.textContent = active ? '颜色叠加中' : '叠加颜色';
           if (active) ov.setAttribute('data-active', '1'); else ov.removeAttribute('data-active');
         }
@@ -302,12 +333,102 @@ export function buildPanelScript(apiPort: number, token: string): string {
     fr.readAsDataURL(f);
   });
 
-  $('zb-overlay').addEventListener('click', function () { $('zb-color').click(); });
-  $('zb-color').addEventListener('input', function () {
-    post('/api/config', { overlayColor: this.value }, function () { status('颜色叠加已应用'); refresh(); });
+  // Custom palette state. curOverlay tracks the stored config (kept fresh by
+  // refresh()); opening with no active overlay shows white. It deliberately
+  // has no outside-click or wheel handler — the palette must survive both.
+  var curOverlay = '';
+  var palH = 0, palS = 0, palV = 1;
+  var palPushTimer = null;
+
+  function hsvToHex(h, s, v) {
+    var i = Math.floor(h / 60) % 6, f = h / 60 - Math.floor(h);
+    var p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+    var rgb = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i];
+    return '#' + rgb.map(function (c) { return ('0' + Math.round(c * 255).toString(16)).slice(-2); }).join('').toUpperCase();
+  }
+  function hexToRgb(hex) {
+    var n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    var h = 0;
+    if (d > 0) {
+      if (max === r) h = 60 * (((g - b) / d) % 6);
+      else if (max === g) h = 60 * ((b - r) / d + 2);
+      else h = 60 * ((r - g) / d + 4);
+    }
+    if (h < 0) h += 360;
+    return [h, max === 0 ? 0 : d / max, max];
+  }
+  function palApply(push) {
+    var hex = hsvToHex(palH, palS, palV);
+    $('zb-sv').style.backgroundColor = 'hsl(' + Math.round(palH) + ',100%,50%)';
+    $('zb-sv-knob').style.left = (palS * 100) + '%';
+    $('zb-sv-knob').style.bottom = (palV * 100) + '%';
+    var rgb = hexToRgb(hex);
+    $('zb-swatch').style.backgroundColor = hex;
+    $('zb-pal-val').textContent = hex + ' (' + rgb.join(',') + ')';
+    if (!push) return;
+    clearTimeout(palPushTimer);
+    palPushTimer = setTimeout(function () {
+      var ov = $('zb-overlay');
+      ov.textContent = '颜色叠加中';
+      ov.setAttribute('data-active', '1');
+      post('/api/config', { overlayColor: hex }, function () { status('颜色叠加已应用'); refresh(); });
+    }, 200);
+  }
+  function paletteOpen() { return !$('zb-palette').hidden; }
+  function closePalette() { $('zb-palette').hidden = true; }
+  function openPalette() {
+    var rgb = /^#[0-9a-fA-F]{6}$/.test(curOverlay) ? hexToRgb(curOverlay) : [255, 255, 255];
+    var hsv = rgbToHsv(rgb[0], rgb[1], rgb[2]);
+    palH = hsv[0]; palS = hsv[1]; palV = hsv[2];
+    var pal = $('zb-palette'), panel = $('zb-panel'), btn = $('zb-overlay');
+    palApply(false);
+    pal.hidden = false;
+    // Dock left of the button with the palette's right edge just outside the
+    // panel (offsets are relative to the panel's padding box), bottom edge
+    // aligned with the button; shift up when the viewport is too short. The
+    // panel is the offset parent, so it also moves with panel drags.
+    var pr = panel.getBoundingClientRect(), br = btn.getBoundingClientRect();
+    var bottom = pr.bottom - 1 - br.bottom;
+    var top = br.bottom - pal.offsetHeight;
+    if (top < 4) bottom -= (4 - top);
+    pal.style.right = (pr.width + 7) + 'px';
+    pal.style.bottom = bottom + 'px';
+  }
+  $('zb-overlay').addEventListener('click', function () {
+    paletteOpen() ? closePalette() : openPalette();
   });
+  var sv = $('zb-sv');
+  function svPick(e) {
+    var r = sv.getBoundingClientRect();
+    palS = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    palV = Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height));
+    palApply(true);
+  }
+  sv.addEventListener('pointerdown', function (e) {
+    try { sv.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
+    svPick(e);
+  });
+  sv.addEventListener('pointermove', function (e) { if (e.buttons & 1) svPick(e); });
+  $('zb-hue').addEventListener('input', function () {
+    palH = Number(this.value);
+    palApply(true);
+  });
+  $('zb-pal-reset').addEventListener('click', function () {
+    post('/api/config', { overlayColor: '' }, function () {
+      closePalette();
+      status('已取消颜色叠加');
+      refresh();
+    });
+  });
+  $('zb-pal-close').addEventListener('click', closePalette);
   $('zb-overlay').addEventListener('contextmenu', function (e) {
     e.preventDefault();
+    closePalette();
     post('/api/config', { overlayColor: '' }, function () { status('已取消颜色叠加'); refresh(); });
   });
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.7.1
+
+The overlay color picker becomes a proper in-panel palette.
+
+### Changed
+
+- **The palette is now a custom widget instead of the native color popup.** The
+  native `<input type=color>` popup could not be positioned (it appeared over
+  the panel) and closed on any outside click or wheel tick. The palette now
+  docks to the left of the 叠加颜色 button, fully outside the panel, and stays
+  open no matter where you click or scroll; clicking the button again or
+  关闭 puts it away. It moves with the panel when dragged.
+- **Opening shows the effective color.** The palette is seeded from the active
+  overlay color; with no overlay active it starts at white `#FFFFFF
+  (255,255,255)`. The hex + RGB readout and swatch update live while picking,
+  and the color applies to the wallpaper as you drag.
+- **重置 / 关闭 buttons.** 重置 closes the palette and cancels the overlay in
+  one step; the 叠加颜色 button flips back to its inactive label via the
+  regular refresh. Right-clicking the button still cancels the overlay
+  directly.
+
 ## v0.7.0
 
 A gentler blur algorithm and a wallpaper color overlay.
