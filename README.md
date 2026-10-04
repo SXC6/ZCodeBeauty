@@ -129,6 +129,12 @@ You can also just type `/beautify <image path>` in ZCode and let the agent do it
 | `set_recovery_mode` | Switch between `off` / `on-start` / `always` |
 | `repair_launchers` | Add the debug-port flag to launch entries missing it; guarantees a working per-user shortcut |
 
+## Compatibility, updates & terms
+
+- **App updates** — the plugin lives entirely under `~/.zcode/cli/plugins/` (user space), so ZCode upgrades never touch it. The injected theme dies with the renderer on every restart and is put back by the recovery mode; when an update rebuilds the Start Menu shortcut without the debug flag, `on-start`/`always` recovery re-adds it automatically on the next start (or run `repair-launchers` yourself). The desktop `ZCode (Beautified)` shortcut is user-level and survives updates.
+- **Terms of service** — as of the ZCode user agreement ([zcode.z.ai/cn/terms](https://zcode.z.ai/cn/terms), retrieved 2026-10): installing open-source third-party plugins / Skills / MCP servers is an *anticipated* scenario, not a prohibited one — the agreement assigns the risks of unofficial packages to the user. This plugin adds a cosmetic layer only: it never modifies ZCode's installation files or security guardrails, never touches branding or AI-content labels, and makes no third-party network calls (everything is local). The debug port is a standard Chromium interface and the terms say nothing about it. That said, this is an **unofficial cosmetic mod with no warranty** — use at your own discretion; `reset_appearance` plus uninstall restores the stock client completely at any time.
+- **Security note** — a debug port lets any *local* process attach to the renderer. Enable it only on a machine you trust.
+
 ## Project structure
 
 ```

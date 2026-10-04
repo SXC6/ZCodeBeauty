@@ -9,7 +9,7 @@ This repository is two things at once. Pick your path by what the user asked for
 
 ## One-line facts
 
-- Repo: `https://github.com/Logocceai/zcode-beautify` — plugin manifest at the root (`marketplace.json` + `.zcode-plugin/plugin.json`), so the repo itself is a single-plugin marketplace.
+- Repo: `https://github.com/SXC6/ZCodeBeauty` (this fork, MIT; upstream: `https://github.com/Logocceai/zcode-beautify`) — plugin manifest at the root (`marketplace.json` + `.zcode-plugin/plugin.json`), so the repo itself is a single-plugin marketplace.
 - The plugin beautifies the **ZCode desktop client** via CDP injection (`dist/cli.js`, prebuilt, zero install steps). It never modifies app files.
 - `skill-pack/` is platform-agnostic (any Electron app, any AI agent) and versioned together with the plugin.
 

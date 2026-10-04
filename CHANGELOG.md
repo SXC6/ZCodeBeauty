@@ -7,6 +7,10 @@ chrome.
 
 ### Fixed
 
+- **Quick picks applied a different color than their chip** (magenta came out
+  `#EB2F0E`, blue lost a channel): the HSV→hex sector fraction was computed
+  with `floor(h)` instead of `floor(h/60)`, which poisoned every hue past the
+  first 60° sector. All sixteen presets are verified to round-trip exactly.
 - **Touching the hue slider after a quick pick jumped the color.** The swatch
   click updated the SV square, knob, readout and RGB fields but left the hue
   slider's thumb at its stale position; the next touch of the slider then

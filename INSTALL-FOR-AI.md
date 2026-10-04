@@ -1,10 +1,33 @@
 # INSTALL-FOR-AI — install the ZCode beautify plugin (AI instructions)
 
 > **You are an AI agent.** A user handed you this file (or the repository link
-> <https://github.com/Logocceai/zcode-beautify>) and wants the finished plugin
+> <https://github.com/SXC6/ZCodeBeauty>) and wants the finished plugin
 > installed into **their ZCode desktop client**. Follow this document top to
 > bottom. If you can run shell commands, use **Route B**; otherwise use
 > **Route A** to guide the user, or **Route C** to output instructions.
+
+## Copy-paste prompt (give this to your ZCode agent)
+
+```text
+请帮我把 ZCode 美化插件安装到我的 ZCode 桌面客户端并配置好。
+
+插件仓库:https://github.com/SXC6/ZCodeBeauty(开源 MIT;根目录的
+INSTALL-FOR-AI.md 是面向你的完整安装手册,请先通读再严格照做)
+
+要求:
+1. 优先用官方 `zcode.cjs plugins` CLI 安装:marketplace add 该仓库克隆目录,
+   然后 plugins install zcode-beautify@zcode-beautify,最后 plugins list 验证
+   (需 Node.js ≥ 20);
+2. 运行插件自带的 repair-launchers,给所有 ZCode 启动入口补上
+   --remote-debugging-port=9222;
+3. 让我完全退出并重启 ZCode(托盘图标也算在运行);
+4. 问我壁纸主题重启后如何自动恢复(on-start / always / off),并用插件 CLI 设置;
+5. 如果我想要实时设置面板,用 `serve --detach` 启动服务(必须带 --detach,
+   不要起第二个);
+6. 最后让我用 /beautify <图片路径> 设一张壁纸,或让我把图片路径发给你。
+全程不得修改 ZCode 的安装文件;遇到问题按 INSTALL-FOR-AI.md 的说明处理,
+不要猜测内部文件格式。
+```
 
 ## First: is this even the right package?
 
@@ -24,11 +47,13 @@ If they want to beautify a non-ZCode app or develop their own → read
 
 ## What you are installing
 
-`zcode-beautify` v0.6.0 — a ZCode plugin that adds a wallpaper layer +
+`zcode-beautify` v0.7.3 — a ZCode plugin that adds a wallpaper layer +
 Material Design 3 (Monet) dynamic color to the ZCode desktop client over CDP,
 with a `/beautify` slash command, MCP tools (`set_background`, `apply_options`,
 `refresh_theme`, `reset_appearance`, `beautify_status`, `recovery_status`,
-`set_recovery_mode`, `repair_launchers`), and a live settings panel. Everything
+`set_recovery_mode`, `repair_launchers`), and a live settings panel (blur/dim/
+translucency sliders, a color-overlay palette with sixteen presets, manual RGB
+entry, an adjustable tint strength, and light/dark theme following). Everything
 is prebuilt in `dist/` — nothing to compile.
 
 ## Route A — guide the user through the UI (no shell needed, official path)
