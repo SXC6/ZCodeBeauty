@@ -94,6 +94,7 @@ function publicConfig(config: BeautifyConfig) {
     wallpaperVisible: config.wallpaperVisible,
     fit: config.fit,
     transparency: config.transparency,
+    overlayColor: config.overlayColor ?? "",
     wallpaperSet: Boolean(config.wallpaperPath && fs.existsSync(config.wallpaperPath)),
     hasBackup: hasBackup(),
     cdpPort: config.port,
@@ -108,6 +109,9 @@ function sanitize(body: any): Partial<BeautifyConfig> {
   if (typeof body?.wallpaperVisible === "boolean") out.wallpaperVisible = body.wallpaperVisible;
   if (typeof body?.transparency === "number" && body.transparency >= 0 && body.transparency <= 100) {
     out.transparency = body.transparency;
+  }
+  if (typeof body?.overlayColor === "string" && /^$|^#[0-9a-fA-F]{6}$/.test(body.overlayColor)) {
+    out.overlayColor = body.overlayColor;
   }
   if (body?.fit === "cover" || body?.fit === "contain" || body?.fit === "smart") out.fit = body.fit;
   return out;

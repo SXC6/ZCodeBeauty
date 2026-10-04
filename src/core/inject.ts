@@ -19,6 +19,8 @@ export interface BeautifyConfig {
   fit: WallpaperFit;
   /** Overall UI surface translucency, 0-100; 50 is the shipped look. */
   transparency: number;
+  /** Color blended over the wallpaper ("#rrggbb"); empty = no overlay. */
+  overlayColor: string;
 }
 
 export const DEFAULT_CONFIG: BeautifyConfig = {
@@ -29,6 +31,7 @@ export const DEFAULT_CONFIG: BeautifyConfig = {
   wallpaperVisible: true,
   fit: "cover",
   transparency: 50,
+  overlayColor: "",
 };
 
 export interface BuiltPayload {
@@ -52,18 +55,24 @@ export function buildPayload(config: BeautifyConfig, assets?: WallpaperAssets): 
   const focusY = config.fit === "smart" ? (assets?.focus.y ?? 0.5) : 0.5;
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
 
+  // A full-screen Gaussian reads much stronger than its nominal radius, so the
+  // slider value is damped (1 → 0.30px). The blur filter fringes toward
+  // transparency at the element edges; instead of the old 4% scale step (which
+  // read as a framing change when toggling blur), the layer bleeds 32px beyond
+  // the viewport so the fringe falls off-screen — only while blurred, and the
+  // damped maximum (30 × 0.3 = 9px σ ≈ 27px fringe) stays covered.
+  const effectiveBlur = config.blur > 0 ? (config.blur * 0.3).toFixed(2) : "";
   parts.push(`
 html, body { background: transparent !important; }
 #zcode-beautify-wallpaper {
   position: fixed;
-  inset: 0;
+  inset: ${config.blur > 0 ? "-32px" : "0"};
   z-index: -2147483646;
   background-size: ${resolved};
   background-position: ${resolved === "contain" ? "center" : position};
   background-repeat: no-repeat;
   pointer-events: none;
-  filter: blur(${config.blur}px);
-  transform: scale(${config.blur > 0 ? 1.04 : 1});
+  ${effectiveBlur ? `filter: blur(${effectiveBlur}px);` : "filter: none;"}
 }
 #zcode-beautify-backdrop {
   position: fixed;
@@ -84,6 +93,15 @@ html, body { background: transparent !important; }
   position: absolute;
   inset: 0;
   background: rgb(0 0 0 / var(--zcode-beautify-dim, ${config.dim / 100}));
+}`);
+  }
+  if (config.wallpaperVisible && config.overlayColor) {
+    parts.push(`#zcode-beautify-wallpaper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: ${config.overlayColor};
+  opacity: 0.45;
 }`);
   }
 

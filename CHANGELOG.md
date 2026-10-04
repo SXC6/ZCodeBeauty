@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.7.0
+
+A gentler blur algorithm and a wallpaper color overlay.
+
+### Added
+
+- **Wallpaper color overlay** — blend a picked color over the wallpaper at 45%
+  opacity, on top of (and behind) the existing dim. Exposed as `overlay_color`
+  on `apply_options`, `--overlay-color <#rrggbb|none>` on the CLI, and a new
+  panel button: left-click opens a color picker, right-click clears the
+  overlay; the button lights up while an overlay is active.
+- The panel's action buttons now sit in a 2×2 grid: 背景填充 / 更换图片 /
+  叠加颜色 / 还原默认外观.
+
+### Changed
+
+- **The blur slider is damped**: the actual Gaussian radius is the slider value
+  × 0.3. A full-screen blur reads far stronger than its nominal radius, so the
+  old 1px step was already heavy; the slider now sweeps the subtle range first.
+- **Removed the 4% scale-up while blurred.** The blur fringe toward the screen
+  edges is now hidden by a constant 32px off-screen bleed (applied only while
+  blurred), so toggling blur no longer zooms or re-frames the picture. Stale
+  inline filter/transform from previous injections are cleared on re-inject.
+
 ## v0.6.2
 
 Two panel defects reported from the field, both fixed in the injected panel.

@@ -46,6 +46,9 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '.zb-toggles { display: flex; justify-content: center; gap: 16px; }',
     '.zb-toggles label { display: flex; align-items: center; gap: 5px; margin: 0; cursor: pointer; }',
     '.zb-actions { display: flex; justify-content: center; gap: 10px; }',
+    '.zb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 6px; }',
+    '.zb-grid .zb-btn { padding: 6px 2px; font-size: 11px; }',
+    '#zb-overlay[data-active="1"] { background: rgba(122,162,247,.30); border-color: rgba(122,162,247,.75); }',
     '.zb-btn { display: inline-block; padding: 6px 20px; text-align: center; border-radius: 999px; cursor: pointer;',
       ' background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.14); color: inherit; font-size: 12px; }',
     '.zb-btn:hover { background: rgba(255,255,255,.16); }',
@@ -102,14 +105,12 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '      <label title="根据壁纸自动生成 UI 配色;关闭则保留 ZCode 原生颜色"><input type="checkbox" id="zb-monet">UI 莫奈取色</label>' +
     '      <label title="显示或隐藏背景壁纸"><input type="checkbox" id="zb-vis">显示壁纸</label>' +
     '    </div>' +
-    '    <div class="zb-row zb-actions">' +
+    '    <div class="zb-row zb-grid">' +
     '      <button class="zb-btn" id="zb-fit" title="背景填充方式:填满裁剪铺满窗口 / 完整显示不裁剪(模糊垫底)/ 智能适配自动分析画面主体">背景填充: …</button>' +
-    '    </div>' +
-    '    <div class="zb-row zb-actions">' +
     '      <label class="zb-btn" for="zb-file" title="选择一张图片作为背景壁纸,UI 配色随之更新(支持 JPG/PNG/GIF/BMP,不支持 WebP)">更换图片…</label>' +
     '      <input type="file" id="zb-file" accept="image/jpeg,image/png,image/gif,image/bmp" hidden>' +
-    '    </div>' +
-    '    <div class="zb-row zb-actions">' +
+    '      <button class="zb-btn" id="zb-overlay" title="选一个颜色叠加到壁纸上;再次左键换色,右键取消叠加">叠加颜色</button>' +
+    '      <input type="color" id="zb-color" value="#4b6cb7" style="display:none">' +
     '      <button class="zb-btn" id="zb-reset" title="移除壁纸与配色,还原 ZCode 默认外观(壁纸会被记住,可再次恢复)">还原默认外观</button>' +
     '    </div>' +
     '    <div class="zb-row" style="border-top:1px solid rgba(255,255,255,.1);padding-top:8px">' +
@@ -152,8 +153,8 @@ export function buildPanelScript(apiPort: number, token: string): string {
   function preview() {
     var w = wallpaperEl(); if (!w) return;
     var b = Number($('zb-blur').value), d = Number($('zb-dim').value);
-    w.style.filter = b > 0 ? 'blur(' + b + 'px)' : 'none';
-    w.style.transform = b > 0 ? 'scale(1.04)' : 'none';
+    w.style.filter = b > 0 ? 'blur(' + (b * 0.3).toFixed(2) + 'px)' : 'none';
+    w.style.transform = '';
     document.documentElement.style.setProperty('--zcode-beautify-dim', String(d / 100));
   }
 
@@ -223,6 +224,12 @@ export function buildPanelScript(apiPort: number, token: string): string {
         var m = $('zb-monet'); if (m && document.activeElement !== m) m.checked = !!c.monet;
         var v = $('zb-vis'); if (v && document.activeElement !== v) v.checked = !!c.wallpaperVisible;
         $('zb-fit') && applyFitLabel($('zb-fit'), c.fit || 'cover');
+        var ov = $('zb-overlay');
+        if (ov) {
+          var active = typeof c.overlayColor === 'string' && c.overlayColor !== '';
+          ov.textContent = active ? '颜色叠加中' : '叠加颜色';
+          if (active) ov.setAttribute('data-active', '1'); else ov.removeAttribute('data-active');
+        }
         var resetBtn = $('zb-reset');
         if (c.wallpaperSet) {
           resetBtn.textContent = '还原默认外观';
@@ -277,6 +284,15 @@ export function buildPanelScript(apiPort: number, token: string): string {
       post('/api/wallpaper', { dataUri: fr.result, name: f.name }, function () { status('壁纸已更新 updated'); });
     };
     fr.readAsDataURL(f);
+  });
+
+  $('zb-overlay').addEventListener('click', function () { $('zb-color').click(); });
+  $('zb-color').addEventListener('input', function () {
+    post('/api/config', { overlayColor: this.value }, function () { status('颜色叠加已应用'); refresh(); });
+  });
+  $('zb-overlay').addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    post('/api/config', { overlayColor: '' }, function () { status('已取消颜色叠加'); refresh(); });
   });
 
   $('zb-reset').addEventListener('click', function () {

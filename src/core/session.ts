@@ -15,6 +15,7 @@ export interface ApplyOptions {
   wallpaperVisible?: boolean;
   fit?: "cover" | "contain" | "smart";
   transparency?: number;
+  overlayColor?: string;
 }
 
 /** Applies (or refreshes) the theme using the stored config. */
@@ -38,6 +39,7 @@ export async function applyWallpaper(imagePath: string, opts: ApplyOptions): Pro
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
     transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
   };
 
   // Keep a copy of the wallpaper inside the data dir so the theme survives
@@ -68,6 +70,7 @@ export async function applyColorsOnly(opts: ApplyOptions): Promise<number> {
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
     transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
   };
   saveConfig(config);
   return applyToZCode(config, await buildPayloadFromConfig(config));

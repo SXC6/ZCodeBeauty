@@ -66112,6 +66112,7 @@ function buildBootstrapScript(payload) {
       document.documentElement.appendChild(wp);
     }
     wp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    wp.style.transform = ''; wp.style.filter = '';
   } else if (wp) {
     wp.remove();
   }
@@ -144510,7 +144511,8 @@ var DEFAULT_CONFIG = {
   monet: true,
   wallpaperVisible: true,
   fit: "cover",
-  transparency: 50
+  transparency: 50,
+  overlayColor: ""
 };
 function buildPayload(config2, assets) {
   const parts = [];
@@ -144518,18 +144520,18 @@ function buildPayload(config2, assets) {
   const focusX = config2.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
   const focusY = config2.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
+  const effectiveBlur = config2.blur > 0 ? (config2.blur * 0.3).toFixed(2) : "";
   parts.push(`
 html, body { background: transparent !important; }
 #zcode-beautify-wallpaper {
   position: fixed;
-  inset: 0;
+  inset: ${config2.blur > 0 ? "-32px" : "0"};
   z-index: -2147483646;
   background-size: ${resolved};
   background-position: ${resolved === "contain" ? "center" : position};
   background-repeat: no-repeat;
   pointer-events: none;
-  filter: blur(${config2.blur}px);
-  transform: scale(${config2.blur > 0 ? 1.04 : 1});
+  ${effectiveBlur ? `filter: blur(${effectiveBlur}px);` : "filter: none;"}
 }
 #zcode-beautify-backdrop {
   position: fixed;
@@ -144550,6 +144552,15 @@ html, body { background: transparent !important; }
   position: absolute;
   inset: 0;
   background: rgb(0 0 0 / var(--zcode-beautify-dim, ${config2.dim / 100}));
+}`);
+  }
+  if (config2.wallpaperVisible && config2.overlayColor) {
+    parts.push(`#zcode-beautify-wallpaper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: ${config2.overlayColor};
+  opacity: 0.45;
 }`);
   }
   if (assets) {
@@ -144726,7 +144737,8 @@ async function applyWallpaper(imagePath, opts) {
     monet: opts.monet ?? stored.monet ?? DEFAULT_CONFIG.monet,
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
-    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency
+    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor
   };
   fs4.mkdirSync(dataDir(), { recursive: true });
   const dest = path2.join(dataDir(), "wallpaper" + path2.extname(abs).toLowerCase());
@@ -144749,7 +144761,8 @@ async function applyColorsOnly(opts) {
     monet: opts.monet ?? stored.monet ?? DEFAULT_CONFIG.monet,
     wallpaperVisible: opts.wallpaperVisible ?? stored.wallpaperVisible ?? DEFAULT_CONFIG.wallpaperVisible,
     fit: opts.fit ?? stored.fit ?? DEFAULT_CONFIG.fit,
-    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency
+    transparency: opts.transparency ?? stored.transparency ?? DEFAULT_CONFIG.transparency,
+    overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor
   };
   saveConfig(config2);
   return applyToZCode(config2, await buildPayloadFromConfig(config2));
@@ -145131,7 +145144,7 @@ async function repairLaunchers(opts) {
 // dist/mcp/server.js
 var server = new McpServer({
   name: "zcode-beautify",
-  version: "0.6.2"
+  version: "0.7.0"
 });
 server.registerTool("set_background", {
   title: "Set ZCode wallpaper",
@@ -145160,11 +145173,12 @@ server.registerTool("apply_options", {
     monet: external_exports.boolean().optional().describe("Regenerate UI colors from the wallpaper (true) or keep ZCode's original colors (false)"),
     wallpaper_visible: external_exports.boolean().optional().describe("Translucent surfaces showing the wallpaper (true) or opaque surfaces (false)"),
     fit: external_exports.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point"),
-    transparency: external_exports.number().min(0).max(100).optional().describe("Overall UI surface translucency 0-100 (50 = the shipped look; lower = more opaque, higher = more see-through)")
+    transparency: external_exports.number().min(0).max(100).optional().describe("Overall UI surface translucency 0-100 (50 = the shipped look; lower = more opaque, higher = more see-through)"),
+    overlay_color: external_exports.string().optional().describe("Blend a color over the wallpaper, hex like '#4b6cb7'; pass an empty string to clear the overlay")
   }
-}, async ({ blur, dim, monet, wallpaper_visible, fit, transparency }) => {
+}, async ({ blur, dim, monet, wallpaper_visible, fit, transparency, overlay_color }) => {
   try {
-    const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency });
+    const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency, overlayColor: overlay_color });
     return { content: [{ type: "text", text: `Appearance updated in ${windows} window(s).` }] };
   } catch (err) {
     return { content: [{ type: "text", text: `Failed: ${err.message}` }], isError: true };

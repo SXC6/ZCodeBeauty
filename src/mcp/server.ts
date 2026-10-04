@@ -60,11 +60,12 @@ server.registerTool(
       wallpaper_visible: z.boolean().optional().describe("Translucent surfaces showing the wallpaper (true) or opaque surfaces (false)"),
       fit: z.enum(["cover", "contain", "smart"]).optional().describe("Framing: cover fills and crops, contain letterboxes with a blurred backdrop, smart analyzes the picture locally and picks the best framing + focus point"),
       transparency: z.number().min(0).max(100).optional().describe("Overall UI surface translucency 0-100 (50 = the shipped look; lower = more opaque, higher = more see-through)"),
+      overlay_color: z.string().optional().describe("Blend a color over the wallpaper, hex like '#4b6cb7'; pass an empty string to clear the overlay"),
     },
   },
-  async ({ blur, dim, monet, wallpaper_visible, fit, transparency }) => {
+  async ({ blur, dim, monet, wallpaper_visible, fit, transparency, overlay_color }) => {
     try {
-      const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency });
+      const windows = await applyColorsOnly({ blur, dim, monet, wallpaperVisible: wallpaper_visible, fit, transparency, overlayColor: overlay_color });
       return { content: [{ type: "text", text: `Appearance updated in ${windows} window(s).` }] };
     } catch (err) {
       return { content: [{ type: "text", text: `Failed: ${(err as Error).message}` }], isError: true };

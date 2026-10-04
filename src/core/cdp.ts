@@ -165,6 +165,7 @@ export function buildBootstrapScript(payload: InjectionPayload): string {
       document.documentElement.appendChild(wp);
     }
     wp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    wp.style.transform = ''; wp.style.filter = '';
   } else if (wp) {
     wp.remove();
   }
