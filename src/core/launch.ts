@@ -15,6 +15,13 @@ import { listTargets } from "./cdp.js";
 
 export interface StoredConfig extends Partial<Omit<import("./inject.js").BeautifyConfig, "port">> {
   port?: number;
+  /**
+   * 本机控制 API 的端口,由 `serve` 启动时写入。CLI 的 --port(CDP)不是
+   * 持久化设置,apiPort 同理只在 serve 真正跑起来后才有权威值;MCP 的
+   * set_recovery_mode 注册 autostart 时从这里读,否则只能硬编码默认值,
+   * 用户自定义 --api-port 时会注册出端口错位的服务。
+   */
+  apiPort?: number;
 }
 
 export function dataDir(): string {
@@ -58,6 +65,32 @@ export function atomicWriteJson(file: string, data: unknown): void {
 export function saveConfig(config: StoredConfig): void {
   fs.mkdirSync(dataDir(), { recursive: true });
   atomicWriteJson(configFile(), config);
+}
+
+/**
+ * 壁纸在数据目录的规范名固定为 wallpaper.<扩展名>:换一张扩展名不同的新图
+ * (jpg → png)后,旧文件会留下来,单张最大 20MB。两条导入路径
+ * (/api/wallpaper 与 applyWallpaper)写入新文件后统一调用这里清掉不再被
+ * 引用的旧副本;正则只匹配壁纸规范名,用户自己放进数据目录的其他文件一律不碰。
+ */
+export function cleanStaleWallpapers(dest: string): void {
+  const dir = path.dirname(dest);
+  const base = path.basename(dest).toLowerCase();
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(dir);
+  } catch {
+    return; // 目录读不到就无从清理,下一次导入会再试
+  }
+  for (const name of entries) {
+    if (!/^wallpaper\.(jpe?g|png|gif|bmp|tiff?|webp)$/i.test(name)) continue;
+    if (name.toLowerCase() === base) continue;
+    try {
+      fs.unlinkSync(path.join(dir, name));
+    } catch {
+      /* 被占用或权限不足:留着无害,只是多占一份空间 */
+    }
+  }
 }
 
 const ZCODE_EXE_CANDIDATES =

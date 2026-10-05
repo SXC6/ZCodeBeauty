@@ -186,12 +186,14 @@ server.registerTool(
   async ({ mode }) => {
     const stored = loadConfig();
     const cdpPort = stored.port ?? DEFAULT_CONFIG.port;
+    // serve 启动时会把实际 apiPort 写进配置;读不到(serve 从未跑过)才用默认。
+    const apiPort = stored.apiPort ?? 9223;
     setRecoveryMode(mode);
 
     let note = "";
     if (mode === "always") {
       const cliPath = fileURLToPath(new URL("../cli.js", import.meta.url));
-      const status = installAutostart({ nodePath: process.execPath, cliPath, cdpPort, apiPort: 9223 });
+      const status = installAutostart({ nodePath: process.execPath, cliPath, cdpPort, apiPort });
       note = status.installed
         ? ` Autostart registered at ${status.entryPath} (it takes effect from the next sign-in).`
         : ` Could not register autostart${status.note ? `: ${status.note}` : ""}.`;

@@ -10,6 +10,10 @@
  */
 
 import { hexToRgb, hsvToHex, rgbToHsv } from "./colorUtil.js";
+import { SUPPORTED_IMAGE_MIME } from "../core/monet.js";
+
+/** 面板选图控件的 accept 清单,与 server 白名单同源(不含 WebP)。 */
+const ACCEPT_ATTR = SUPPORTED_IMAGE_MIME.join(",");
 
 export const PANEL_ROOT_ID = "zcode-beautify-panel-root";
 
@@ -161,7 +165,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '    <div class="zb-row zb-grid">' +
     '      <button class="zb-btn" id="zb-fit" title="背景填充方式:填满裁剪铺满窗口 / 完整显示不裁剪(模糊垫底)/ 智能适配自动分析画面主体">背景填充: …</button>' +
     '      <label class="zb-btn" for="zb-file" title="选择一张图片作为背景壁纸,UI 配色随之更新(支持 JPG/PNG/GIF/BMP,不支持 WebP)">更换图片…</label>' +
-    '      <input type="file" id="zb-file" accept="image/jpeg,image/png,image/gif,image/bmp" hidden>' +
+    '      <input type="file" id="zb-file" accept="${ACCEPT_ATTR}" hidden>' +
     '      <button class="zb-btn" id="zb-overlay" title="选一个颜色叠加到壁纸上;调色板里可重置或关闭,右键按钮直接取消叠加">叠加颜色</button>' +
     '      <button class="zb-btn" id="zb-reset" title="移除壁纸与配色,还原 ZCode 默认外观(壁纸会被记住,可再次恢复)">还原默认外观</button>' +
     '    </div>' +
@@ -229,14 +233,19 @@ export function buildPanelScript(apiPort: number, token: string): string {
     h['x-zb-token'] = TOKEN;
     return h;
   }
+  // fetch 必须带超时:serve 单线程解码大图时整段无响应(最长 60s),没有
+  // 超时的话状态栏永远停在"读取图片中…",离线检测也不会触发。post 的 90s
+  // 覆盖"上传 + 60s 解码上限 + 取色"的最坏链路;状态轮询 10s 就该有回应。
+  var POST_TIMEOUT = 90000, POLL_TIMEOUT = 10000;
+  function isTimeout(e) { return e && (e.name === 'TimeoutError' || e.name === 'AbortError'); }
   function post(path, body, cb) {
-    fetch(API + path, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
+    fetch(API + path, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify(body), signal: AbortSignal.timeout(POST_TIMEOUT) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d && d.error) { status('操作失败: ' + d.error); return; }
         if (cb) cb(d);
       })
-      .catch(function () { status('无法连接美化服务 service unreachable'); });
+      .catch(function (e) { status(isTimeout(e) ? '服务响应超时,请稍后重试' : '无法连接美化服务 service unreachable'); });
   }
 
   // Local live preview; the server re-injects the authoritative CSS right after.
@@ -305,7 +314,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
   }
 
   function refresh() {
-    fetch(API + '/api/config', { headers: auth() })
+    fetch(API + '/api/config', { headers: auth(), signal: AbortSignal.timeout(POLL_TIMEOUT) })
       .then(function (r) { return r.json(); })
       .then(function (c) {
         setOffline(false);
@@ -558,18 +567,16 @@ export function buildPanelScript(apiPort: number, token: string): string {
     palStrength = Math.min(100, Math.max(1, v));
     palApply(true);
   });
-  $('zb-pal-reset').addEventListener('click', function () {
-    post('/api/config', { overlayColor: '' }, function () {
-      closePalette();
-      status('已取消颜色叠加');
-      refresh();
-    });
-  });
+  // 重置按钮与右键按钮是同一个动作:关调色板 + 清空叠加色 + 刷新读数。
+  function cancelOverlay() {
+    closePalette();
+    post('/api/config', { overlayColor: '' }, function () { status('已取消颜色叠加'); refresh(); });
+  }
+  $('zb-pal-reset').addEventListener('click', cancelOverlay);
   $('zb-pal-close').addEventListener('click', closePalette);
   $('zb-overlay').addEventListener('contextmenu', function (e) {
     e.preventDefault();
-    closePalette();
-    post('/api/config', { overlayColor: '' }, function () { status('已取消颜色叠加'); refresh(); });
+    cancelOverlay();
   });
 
   $('zb-reset').addEventListener('click', function () {
@@ -607,7 +614,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
   }
 
   function refreshStatus() {
-    fetch(API + '/api/status', { headers: auth() })
+    fetch(API + '/api/status', { headers: auth(), signal: AbortSignal.timeout(POLL_TIMEOUT) })
       .then(function (r) { return r.json(); })
       .then(applyStatus)
       .catch(function () { /* the offline banner already covers this */ });

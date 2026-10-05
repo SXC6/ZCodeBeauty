@@ -33,8 +33,40 @@ export interface ImageFocus {
   fit: "cover" | "contain";
 }
 
+/**
+ * 本地解码器(jimp)真正支持的图片 MIME,以及它们在数据目录里的规范扩展名。
+ * server 路由的白名单与落盘名、面板 `<input accept>`、解码失败的错误提示
+ * 全部从这里生成 —— 以前三处各写各的,新增格式时漏掉一处就会出现
+ * "面板能选、服务端拒收"的错位。WebP 不在清单里:jimp 解码它会永久挂起。
+ */
+export const SUPPORTED_IMAGE_MIME = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/bmp",
+  "image/tiff",
+] as const;
+
+/** MIME → 数据目录里的规范文件扩展名。 */
+export const IMAGE_EXT: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/gif": ".gif",
+  "image/bmp": ".bmp",
+  "image/tiff": ".tiff",
+};
+
 const MAX_WIDTH = 2560;
 const JPEG_QUALITY = 82;
+
+/**
+ * 壁纸体积上限。注入链路里图片以 base64 走 HTTP body(膨胀约 1/3),20MB
+ * 已是面板上传与本地解码的双重安全余量;server 路由与 CLI 的 applyWallpaper
+ * 共用这一份定义,两边的拒绝行为保持一致。
+ */
+export const MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
+
+const DECODE_TIMEOUT_MS = 60_000;
 
 /** Decodes with jimp but names the supported formats when it fails. */
 async function readImage(imagePath: string) {
@@ -56,13 +88,13 @@ async function readImage(imagePath: string) {
     ]);
   } catch (err) {
     // jimp's raw decoder errors are cryptic; say what actually matters.
+    const formats = SUPPORTED_IMAGE_MIME.map((m) => m.slice("image/".length).toUpperCase()).join(", ");
     throw new Error(
       `Cannot decode image "${imagePath}": ${(err as Error).message}. ` +
-        `Supported formats: JPEG, PNG, BMP, GIF, TIFF (WebP is not supported).`
+        `Supported formats: ${formats} (WebP is not supported).`
     );
   }
 }
-const DECODE_TIMEOUT_MS = 60_000;
 
 export async function loadWallpaper(imagePath: string, maxDimension = MAX_WIDTH): Promise<WallpaperAssets> {
   const image = await readImage(imagePath);

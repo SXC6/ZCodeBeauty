@@ -12,7 +12,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { applyToZCode, type BeautifyConfig } from "./core/inject.js";
+import { applyToZCode, DEFAULT_CONFIG, type BeautifyConfig } from "./core/inject.js";
 import type { ApplyOptions } from "./core/session.js";
 import { launchZcode, dataDir } from "./core/launch.js";
 import { applyWallpaper, resetAppearance } from "./core/session.js";
@@ -363,12 +363,9 @@ async function startServeDetached(cdpPort: number, apiPort: number): Promise<voi
 async function watch(port: number): Promise<void> {
   const { buildPayloadFromConfig } = await import("./core/session.js");
   const { loadConfig } = await import("./core/launch.js");
-  const config = {
-    ...{ port: 9222, blur: 0, dim: 25, monet: true, wallpaperVisible: true, fit: "cover" as const },
-    ...loadConfig(),
-    port,
-    fit: loadConfig().fit ?? "cover",
-  } as BeautifyConfig;
+  // 默认值兜底交给 DEFAULT_CONFIG,stored 里有什么就覆盖什么——
+  // 以前这里 loadConfig() 调了两次,还手动补 fit 的 ?? 默认值,都是多余的。
+  const config: BeautifyConfig = { ...DEFAULT_CONFIG, ...loadConfig(), port };
   const payload = await buildPayloadFromConfig(config);
 
   let injected = new Set<string>();

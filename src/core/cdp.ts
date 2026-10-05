@@ -87,7 +87,14 @@ export class CdpConnection {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params }));
+      try {
+        this.ws.send(JSON.stringify({ id, method, params }));
+      } catch (err) {
+        // 连接已关闭/正在关闭时 socket.send 会同步抛出;close 事件的批量
+        // reject 早已跑完,这条 pending 若不删掉就永远留在 Map 里。
+        this.pending.delete(id);
+        reject(new CdpError(`CDP send failed (${method}): ${(err as Error).message}`));
+      }
     });
   }
 
@@ -145,9 +152,15 @@ export function buildBootstrapScript(payload: InjectionPayload): string {
   const marker = payload.marker ?? "zcode-beautify";
   return `(function(){
   var MARKER = ${JSON.stringify(marker)};
+  var CSS = ${JSON.stringify(payload.css)};
+  var WP = ${JSON.stringify(payload.wallpaperDataUri ?? "")};
+  var HAS_WP = ${JSON.stringify(Boolean(payload.wallpaperDataUri))};
   if (!window.__zcodeBeautify) window.__zcodeBeautify = {};
-  if (window.__zcodeBeautify.cssText === ${JSON.stringify(payload.css)}) return;
-  window.__zcodeBeautify.cssText = ${JSON.stringify(payload.css)};
+  // CSS 与壁纸都未变化才早退。以前只比较 CSS:换一张取色结果恰好相同的新图
+  // 时,早退会跳过壁纸更新,界面停留在旧图上。
+  if (window.__zcodeBeautify.cssText === CSS && window.__zcodeBeautify.wallpaper === WP) return;
+  window.__zcodeBeautify.cssText = CSS;
+  window.__zcodeBeautify.wallpaper = WP;
 
   var style = document.getElementById(MARKER + '-style');
   if (!style) {
@@ -155,7 +168,7 @@ export function buildBootstrapScript(payload: InjectionPayload): string {
     style.id = MARKER + '-style';
     (document.head || document.documentElement).appendChild(style);
   }
-  style.textContent = ${JSON.stringify(payload.css)};
+  style.textContent = CSS;
 
   // The panel's live preview parks its values in inline variables on <html>;
   // drop them so the freshly injected :root rule is authoritative again.
@@ -163,13 +176,13 @@ export function buildBootstrapScript(payload: InjectionPayload): string {
   document.documentElement.style.removeProperty('--zcode-beautify-dim');
 
   var wp = document.getElementById(MARKER + '-wallpaper');
-  if (${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
+  if (HAS_WP) {
     if (!wp) {
       wp = document.createElement('div');
       wp.id = MARKER + '-wallpaper';
       document.documentElement.appendChild(wp);
     }
-    wp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    wp.style.backgroundImage = 'url(' + WP + ')';
     wp.style.transform = ''; wp.style.filter = '';
   } else if (wp) {
     wp.remove();
@@ -177,13 +190,13 @@ export function buildBootstrapScript(payload: InjectionPayload): string {
 
   var FIT = ${JSON.stringify(payload.fit ?? "cover")};
   var bp = document.getElementById(MARKER + '-backdrop');
-  if (FIT === 'contain' && ${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
+  if (FIT === 'contain' && HAS_WP) {
     if (!bp) {
       bp = document.createElement('div');
       bp.id = MARKER + '-backdrop';
       document.documentElement.appendChild(bp);
     }
-    bp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    bp.style.backgroundImage = 'url(' + WP + ')';
     bp.dataset.on = '1';
   } else if (bp) {
     bp.dataset.on = '0';
@@ -191,9 +204,12 @@ export function buildBootstrapScript(payload: InjectionPayload): string {
 
   // Persist for the panel's self-heal path (best effort; large wallpapers may
   // exceed the localStorage quota, in which case only the CSS is saved).
+  // 差量写:调参推送很频繁,壁纸 dataUri 有几百 KB —— 值没变就跳过 setItem,
+  // 省掉每次推送的整段序列化。
   try {
-    localStorage.setItem(MARKER + ':css', ${JSON.stringify(payload.css)});
-    localStorage.setItem(MARKER + ':wallpaper', ${JSON.stringify(payload.wallpaperDataUri ?? "")});
+    var cssKey = MARKER + ':css', wpKey = MARKER + ':wallpaper';
+    if (localStorage.getItem(cssKey) !== CSS) localStorage.setItem(cssKey, CSS);
+    if (localStorage.getItem(wpKey) !== WP) localStorage.setItem(wpKey, WP);
   } catch (e) {}
 })();`;
 }

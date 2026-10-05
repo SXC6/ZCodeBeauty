@@ -66057,7 +66057,12 @@ var CdpConnection = class _CdpConnection {
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params }));
+      try {
+        this.ws.send(JSON.stringify({ id, method, params }));
+      } catch (err) {
+        this.pending.delete(id);
+        reject(new CdpError(`CDP send failed (${method}): ${err.message}`));
+      }
     });
   }
   on(event, handler) {
@@ -66092,9 +66097,15 @@ function buildBootstrapScript(payload) {
   const marker = payload.marker ?? "zcode-beautify";
   return `(function(){
   var MARKER = ${JSON.stringify(marker)};
+  var CSS = ${JSON.stringify(payload.css)};
+  var WP = ${JSON.stringify(payload.wallpaperDataUri ?? "")};
+  var HAS_WP = ${JSON.stringify(Boolean(payload.wallpaperDataUri))};
   if (!window.__zcodeBeautify) window.__zcodeBeautify = {};
-  if (window.__zcodeBeautify.cssText === ${JSON.stringify(payload.css)}) return;
-  window.__zcodeBeautify.cssText = ${JSON.stringify(payload.css)};
+  // CSS \u4E0E\u58C1\u7EB8\u90FD\u672A\u53D8\u5316\u624D\u65E9\u9000\u3002\u4EE5\u524D\u53EA\u6BD4\u8F83 CSS:\u6362\u4E00\u5F20\u53D6\u8272\u7ED3\u679C\u6070\u597D\u76F8\u540C\u7684\u65B0\u56FE
+  // \u65F6,\u65E9\u9000\u4F1A\u8DF3\u8FC7\u58C1\u7EB8\u66F4\u65B0,\u754C\u9762\u505C\u7559\u5728\u65E7\u56FE\u4E0A\u3002
+  if (window.__zcodeBeautify.cssText === CSS && window.__zcodeBeautify.wallpaper === WP) return;
+  window.__zcodeBeautify.cssText = CSS;
+  window.__zcodeBeautify.wallpaper = WP;
 
   var style = document.getElementById(MARKER + '-style');
   if (!style) {
@@ -66102,7 +66113,7 @@ function buildBootstrapScript(payload) {
     style.id = MARKER + '-style';
     (document.head || document.documentElement).appendChild(style);
   }
-  style.textContent = ${JSON.stringify(payload.css)};
+  style.textContent = CSS;
 
   // The panel's live preview parks its values in inline variables on <html>;
   // drop them so the freshly injected :root rule is authoritative again.
@@ -66110,13 +66121,13 @@ function buildBootstrapScript(payload) {
   document.documentElement.style.removeProperty('--zcode-beautify-dim');
 
   var wp = document.getElementById(MARKER + '-wallpaper');
-  if (${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
+  if (HAS_WP) {
     if (!wp) {
       wp = document.createElement('div');
       wp.id = MARKER + '-wallpaper';
       document.documentElement.appendChild(wp);
     }
-    wp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    wp.style.backgroundImage = 'url(' + WP + ')';
     wp.style.transform = ''; wp.style.filter = '';
   } else if (wp) {
     wp.remove();
@@ -66124,13 +66135,13 @@ function buildBootstrapScript(payload) {
 
   var FIT = ${JSON.stringify(payload.fit ?? "cover")};
   var bp = document.getElementById(MARKER + '-backdrop');
-  if (FIT === 'contain' && ${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
+  if (FIT === 'contain' && HAS_WP) {
     if (!bp) {
       bp = document.createElement('div');
       bp.id = MARKER + '-backdrop';
       document.documentElement.appendChild(bp);
     }
-    bp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    bp.style.backgroundImage = 'url(' + WP + ')';
     bp.dataset.on = '1';
   } else if (bp) {
     bp.dataset.on = '0';
@@ -66138,9 +66149,12 @@ function buildBootstrapScript(payload) {
 
   // Persist for the panel's self-heal path (best effort; large wallpapers may
   // exceed the localStorage quota, in which case only the CSS is saved).
+  // \u5DEE\u91CF\u5199:\u8C03\u53C2\u63A8\u9001\u5F88\u9891\u7E41,\u58C1\u7EB8 dataUri \u6709\u51E0\u767E KB \u2014\u2014 \u503C\u6CA1\u53D8\u5C31\u8DF3\u8FC7 setItem,
+  // \u7701\u6389\u6BCF\u6B21\u63A8\u9001\u7684\u6574\u6BB5\u5E8F\u5217\u5316\u3002
   try {
-    localStorage.setItem(MARKER + ':css', ${JSON.stringify(payload.css)});
-    localStorage.setItem(MARKER + ':wallpaper', ${JSON.stringify(payload.wallpaperDataUri ?? "")});
+    var cssKey = MARKER + ':css', wpKey = MARKER + ':wallpaper';
+    if (localStorage.getItem(cssKey) !== CSS) localStorage.setItem(cssKey, CSS);
+    if (localStorage.getItem(wpKey) !== WP) localStorage.setItem(wpKey, WP);
   } catch (e) {}
 })();`;
 }
@@ -144332,8 +144346,17 @@ function customColor(source, color) {
  */
 
 // dist/core/monet.js
+var SUPPORTED_IMAGE_MIME = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/bmp",
+  "image/tiff"
+];
 var MAX_WIDTH = 2560;
 var JPEG_QUALITY = 82;
+var MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
+var DECODE_TIMEOUT_MS = 6e4;
 async function readImage(imagePath) {
   let timeoutReject;
   const timer = setTimeout(() => timeoutReject?.(new Error(`decoding timed out after ${DECODE_TIMEOUT_MS / 1e3}s`)), DECODE_TIMEOUT_MS);
@@ -144346,10 +144369,10 @@ async function readImage(imagePath) {
       })
     ]);
   } catch (err) {
-    throw new Error(`Cannot decode image "${imagePath}": ${err.message}. Supported formats: JPEG, PNG, BMP, GIF, TIFF (WebP is not supported).`);
+    const formats = SUPPORTED_IMAGE_MIME.map((m) => m.slice("image/".length).toUpperCase()).join(", ");
+    throw new Error(`Cannot decode image "${imagePath}": ${err.message}. Supported formats: ${formats} (WebP is not supported).`);
   }
 }
-var DECODE_TIMEOUT_MS = 6e4;
 async function loadWallpaper(imagePath, maxDimension = MAX_WIDTH) {
   const image2 = await readImage(imagePath);
   const { width, height } = image2.bitmap;
@@ -144707,6 +144730,26 @@ function saveConfig(config2) {
   fs4.mkdirSync(dataDir(), { recursive: true });
   atomicWriteJson(configFile(), config2);
 }
+function cleanStaleWallpapers(dest) {
+  const dir = path.dirname(dest);
+  const base = path.basename(dest).toLowerCase();
+  let entries;
+  try {
+    entries = fs4.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!/^wallpaper\.(jpe?g|png|gif|bmp|tiff?|webp)$/i.test(name))
+      continue;
+    if (name.toLowerCase() === base)
+      continue;
+    try {
+      fs4.unlinkSync(path.join(dir, name));
+    } catch {
+    }
+  }
+}
 var ZCODE_EXE_CANDIDATES = process.platform === "win32" ? [
   process.env.ZCODE_WINDOWS_APP_INSTALL_DIR ? path.join(process.env.ZCODE_WINDOWS_APP_INSTALL_DIR, "ZCode.exe") : void 0,
   "C:\\Program Files\\ZCode\\ZCode.exe",
@@ -144792,6 +144835,9 @@ async function applyWallpaper(imagePath, opts) {
   if (/\.webp$/i.test(abs)) {
     throw new Error("WebP is not supported by the local decoder \u2014 re-export the image as JPG or PNG and import again.");
   }
+  if (fs5.statSync(abs).size > MAX_WALLPAPER_BYTES) {
+    throw new Error(`image too large (max ${MAX_WALLPAPER_BYTES / 1024 / 1024} MB)`);
+  }
   const stored = loadConfig();
   const config2 = {
     ...DEFAULT_CONFIG,
@@ -144811,6 +144857,7 @@ async function applyWallpaper(imagePath, opts) {
   if (dest !== abs)
     fs5.copyFileSync(abs, dest);
   const assets = await loadWallpaperCached(dest);
+  cleanStaleWallpapers(dest);
   const payload = buildPayload(config2, assets);
   saveConfig({ ...config2, wallpaperPath: dest });
   const windows = await applyToZCode(config2, payload);
@@ -145211,7 +145258,7 @@ async function repairLaunchers(opts) {
 // dist/mcp/server.js
 var server = new McpServer({
   name: "zcode-beautify",
-  version: "0.7.4"
+  version: "0.7.5"
 });
 server.registerTool("set_background", {
   title: "Set ZCode wallpaper",
@@ -145332,11 +145379,12 @@ server.registerTool("set_recovery_mode", {
 }, async ({ mode }) => {
   const stored = loadConfig();
   const cdpPort = stored.port ?? DEFAULT_CONFIG.port;
+  const apiPort = stored.apiPort ?? 9223;
   setRecoveryMode(mode);
   let note = "";
   if (mode === "always") {
     const cliPath = fileURLToPath(new URL("../cli.js", import.meta.url));
-    const status = installAutostart({ nodePath: process.execPath, cliPath, cdpPort, apiPort: 9223 });
+    const status = installAutostart({ nodePath: process.execPath, cliPath, cdpPort, apiPort });
     note = status.installed ? ` Autostart registered at ${status.entryPath} (it takes effect from the next sign-in).` : ` Could not register autostart${status.note ? `: ${status.note}` : ""}.`;
   } else if (getAutostartStatus().installed) {
     uninstallAutostart();

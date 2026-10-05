@@ -5,8 +5,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { applyToZCode, buildPayload, DEFAULT_CONFIG, resetZCode, type BeautifyConfig, type BuiltPayload } from "./inject.js";
-import { loadWallpaperCached } from "./monet.js";
-import { dataDir, loadConfig, saveConfig } from "./launch.js";
+import { MAX_WALLPAPER_BYTES, loadWallpaperCached } from "./monet.js";
+import { cleanStaleWallpapers, dataDir, loadConfig, saveConfig } from "./launch.js";
 
 export interface ApplyOptions {
   port?: number;
@@ -29,11 +29,15 @@ export async function reapplyStored(): Promise<number> {
 export async function applyWallpaper(imagePath: string, opts: ApplyOptions): Promise<{ windows: number; config: BeautifyConfig }> {
   const abs = path.resolve(imagePath);
   if (!fs.existsSync(abs)) throw new Error(`Image not found: ${abs}`);
-  // Mirror the server route's format guard. jimp cannot decode WebP — and its
-  // decode attempt never settles, which would wedge every later API call, so
-  // reject it before a single byte is copied.
+  // Mirror the server route's guards. jimp cannot decode WebP — and its decode
+  // attempt never settles, which would wedge every later API call, so reject it
+  // before a single byte is copied. The size cap mirrors the server route too:
+  // jimp would happily grind through a 100MB file long after the caller gave up.
   if (/\.webp$/i.test(abs)) {
     throw new Error("WebP is not supported by the local decoder — re-export the image as JPG or PNG and import again.");
+  }
+  if (fs.statSync(abs).size > MAX_WALLPAPER_BYTES) {
+    throw new Error(`image too large (max ${MAX_WALLPAPER_BYTES / 1024 / 1024} MB)`);
   }
 
   const stored = loadConfig();
@@ -59,6 +63,8 @@ export async function applyWallpaper(imagePath: string, opts: ApplyOptions): Pro
 
   // dest 是刚复制/覆盖出来的新文件,mtime 必然变化,缓存按未命中重载。
   const assets = await loadWallpaperCached(dest);
+  // 新图已就位,清掉此前导入留下的旧扩展名副本
+  cleanStaleWallpapers(dest);
   const payload = buildPayload(config, assets);
   // Persist first: even if the app is not running yet, `launch` + `refresh_theme`
   // can pick the stored theme up later.

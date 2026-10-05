@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.7.5
+
+Second pass over the audit findings: fewer wasted bytes on every tweak, no
+more stale wallpaper copies, and hard timeouts in the panel.
+
+### Fixed
+
+- **Swapping wallpapers with identical palettes no longer sticks on the old
+  image.** The bootstrap script's early-exit compared only the CSS; it now
+  requires both the CSS and the wallpaper data URI to be unchanged.
+- **Old wallpaper copies no longer accumulate in the data dir** (jpg → png
+  used to leave a 20MB `wallpaper.jpg` behind, including WebP-era leftovers).
+  Both import paths now prune files matching only the canonical
+  `wallpaper.<ext>` names.
+- **The panel can no longer hang forever on a wedged service**: every fetch
+  got a hard timeout (90s for posts, covering the 60s decode cap; 10s for the
+  status polls), with an explicit "服务响应超时" message instead of a status
+  line stuck on "读取图片中…".
+- **`apply` on the CLI now enforces the same 20MB cap as the server route**
+  (previously it would happily copy and decode a 100MB file).
+- **`set_recovery_mode` from the MCP server no longer hardcodes API port
+  9223**: `serve` persists the port it actually runs on, and the MCP tool
+  reads it — custom `--api-port` setups register autostart correctly.
+
+### Changed
+
+- **Config pushes got cheap.** When the assembled bootstrap is identical to
+  the last one a session received, serve skips the remove/re-add/evaluate
+  round-trip entirely; and the bootstrap now writes its localStorage copies
+  only when the values actually changed — no more re-serializing several
+  hundred KB of wallpaper on every slider release.
+- **Image-format lists have a single source of truth**
+  (`SUPPORTED_IMAGE_MIME` + `IMAGE_EXT` in monet.ts): the server whitelist,
+  the on-disk extension map, the panel's file-picker `accept` attribute and
+  the decoder error message are all generated from it. TIFF now appears
+  consistently everywhere (the panel used to hide it).
+- `CdpConnection.send` cleans up its pending entry when the socket throws
+  (a closed connection used to leak one map entry per failed send).
+
+### Verified
+
+- Dark-mode behavior confirmed by CDP probe: ZCode's CSS tokens do not switch
+  with its `theme-zai-light/-dark` classes, so the Monet overrides apply to
+  both themes unchanged and the `.dark{}` block stays as a harmless fallback.
+
 ## v0.7.4
 
 Correctness and robustness pass: the CLI stops clobbering tuned settings, a

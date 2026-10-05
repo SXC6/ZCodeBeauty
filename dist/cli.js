@@ -94,9 +94,15 @@ function buildBootstrapScript(payload) {
   const marker = payload.marker ?? "zcode-beautify";
   return `(function(){
   var MARKER = ${JSON.stringify(marker)};
+  var CSS = ${JSON.stringify(payload.css)};
+  var WP = ${JSON.stringify(payload.wallpaperDataUri ?? "")};
+  var HAS_WP = ${JSON.stringify(Boolean(payload.wallpaperDataUri))};
   if (!window.__zcodeBeautify) window.__zcodeBeautify = {};
-  if (window.__zcodeBeautify.cssText === ${JSON.stringify(payload.css)}) return;
-  window.__zcodeBeautify.cssText = ${JSON.stringify(payload.css)};
+  // CSS \u4E0E\u58C1\u7EB8\u90FD\u672A\u53D8\u5316\u624D\u65E9\u9000\u3002\u4EE5\u524D\u53EA\u6BD4\u8F83 CSS:\u6362\u4E00\u5F20\u53D6\u8272\u7ED3\u679C\u6070\u597D\u76F8\u540C\u7684\u65B0\u56FE
+  // \u65F6,\u65E9\u9000\u4F1A\u8DF3\u8FC7\u58C1\u7EB8\u66F4\u65B0,\u754C\u9762\u505C\u7559\u5728\u65E7\u56FE\u4E0A\u3002
+  if (window.__zcodeBeautify.cssText === CSS && window.__zcodeBeautify.wallpaper === WP) return;
+  window.__zcodeBeautify.cssText = CSS;
+  window.__zcodeBeautify.wallpaper = WP;
 
   var style = document.getElementById(MARKER + '-style');
   if (!style) {
@@ -104,7 +110,7 @@ function buildBootstrapScript(payload) {
     style.id = MARKER + '-style';
     (document.head || document.documentElement).appendChild(style);
   }
-  style.textContent = ${JSON.stringify(payload.css)};
+  style.textContent = CSS;
 
   // The panel's live preview parks its values in inline variables on <html>;
   // drop them so the freshly injected :root rule is authoritative again.
@@ -112,13 +118,13 @@ function buildBootstrapScript(payload) {
   document.documentElement.style.removeProperty('--zcode-beautify-dim');
 
   var wp = document.getElementById(MARKER + '-wallpaper');
-  if (${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
+  if (HAS_WP) {
     if (!wp) {
       wp = document.createElement('div');
       wp.id = MARKER + '-wallpaper';
       document.documentElement.appendChild(wp);
     }
-    wp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    wp.style.backgroundImage = 'url(' + WP + ')';
     wp.style.transform = ''; wp.style.filter = '';
   } else if (wp) {
     wp.remove();
@@ -126,13 +132,13 @@ function buildBootstrapScript(payload) {
 
   var FIT = ${JSON.stringify(payload.fit ?? "cover")};
   var bp = document.getElementById(MARKER + '-backdrop');
-  if (FIT === 'contain' && ${JSON.stringify(Boolean(payload.wallpaperDataUri))}) {
+  if (FIT === 'contain' && HAS_WP) {
     if (!bp) {
       bp = document.createElement('div');
       bp.id = MARKER + '-backdrop';
       document.documentElement.appendChild(bp);
     }
-    bp.style.backgroundImage = 'url(' + ${JSON.stringify(payload.wallpaperDataUri ?? "")} + ')';
+    bp.style.backgroundImage = 'url(' + WP + ')';
     bp.dataset.on = '1';
   } else if (bp) {
     bp.dataset.on = '0';
@@ -140,9 +146,12 @@ function buildBootstrapScript(payload) {
 
   // Persist for the panel's self-heal path (best effort; large wallpapers may
   // exceed the localStorage quota, in which case only the CSS is saved).
+  // \u5DEE\u91CF\u5199:\u8C03\u53C2\u63A8\u9001\u5F88\u9891\u7E41,\u58C1\u7EB8 dataUri \u6709\u51E0\u767E KB \u2014\u2014 \u503C\u6CA1\u53D8\u5C31\u8DF3\u8FC7 setItem,
+  // \u7701\u6389\u6BCF\u6B21\u63A8\u9001\u7684\u6574\u6BB5\u5E8F\u5217\u5316\u3002
   try {
-    localStorage.setItem(MARKER + ':css', ${JSON.stringify(payload.css)});
-    localStorage.setItem(MARKER + ':wallpaper', ${JSON.stringify(payload.wallpaperDataUri ?? "")});
+    var cssKey = MARKER + ':css', wpKey = MARKER + ':wallpaper';
+    if (localStorage.getItem(cssKey) !== CSS) localStorage.setItem(cssKey, CSS);
+    if (localStorage.getItem(wpKey) !== WP) localStorage.setItem(wpKey, WP);
   } catch (e) {}
 })();`;
 }
@@ -218,7 +227,12 @@ var init_cdp = __esm({
         const id = this.nextId++;
         return new Promise((resolve, reject) => {
           this.pending.set(id, { resolve, reject });
-          this.ws.send(JSON.stringify({ id, method, params }));
+          try {
+            this.ws.send(JSON.stringify({ id, method, params }));
+          } catch (err) {
+            this.pending.delete(id);
+            reject(new CdpError(`CDP send failed (${method}): ${err.message}`));
+          }
         });
       }
       on(event, handler) {
@@ -109600,7 +109614,8 @@ async function readImage(imagePath) {
       })
     ]);
   } catch (err) {
-    throw new Error(`Cannot decode image "${imagePath}": ${err.message}. Supported formats: JPEG, PNG, BMP, GIF, TIFF (WebP is not supported).`);
+    const formats = SUPPORTED_IMAGE_MIME.map((m) => m.slice("image/".length).toUpperCase()).join(", ");
+    throw new Error(`Cannot decode image "${imagePath}": ${err.message}. Supported formats: ${formats} (WebP is not supported).`);
   }
 }
 async function loadWallpaper(imagePath, maxDimension = MAX_WIDTH) {
@@ -109694,14 +109709,29 @@ function toHex2(v) {
 function round2(v) {
   return Math.round(v * 100) / 100;
 }
-var MAX_WIDTH, JPEG_QUALITY, DECODE_TIMEOUT_MS, assetCache;
+var SUPPORTED_IMAGE_MIME, IMAGE_EXT, MAX_WIDTH, JPEG_QUALITY, MAX_WALLPAPER_BYTES, DECODE_TIMEOUT_MS, assetCache;
 var init_monet = __esm({
   "dist/core/monet.js"() {
     "use strict";
     init_esm30();
     init_material_color_utilities();
+    SUPPORTED_IMAGE_MIME = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/bmp",
+      "image/tiff"
+    ];
+    IMAGE_EXT = {
+      "image/jpeg": ".jpg",
+      "image/png": ".png",
+      "image/gif": ".gif",
+      "image/bmp": ".bmp",
+      "image/tiff": ".tiff"
+    };
     MAX_WIDTH = 2560;
     JPEG_QUALITY = 82;
+    MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
     DECODE_TIMEOUT_MS = 6e4;
   }
 });
@@ -109957,6 +109987,7 @@ var init_inject = __esm({
 var launch_exports = {};
 __export(launch_exports, {
   atomicWriteJson: () => atomicWriteJson,
+  cleanStaleWallpapers: () => cleanStaleWallpapers,
   configFile: () => configFile,
   dataDir: () => dataDir,
   findZcodeExecutable: () => findZcodeExecutable,
@@ -110000,6 +110031,26 @@ function atomicWriteJson(file, data) {
 function saveConfig(config) {
   fs4.mkdirSync(dataDir(), { recursive: true });
   atomicWriteJson(configFile(), config);
+}
+function cleanStaleWallpapers(dest) {
+  const dir = path.dirname(dest);
+  const base = path.basename(dest).toLowerCase();
+  let entries;
+  try {
+    entries = fs4.readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (!/^wallpaper\.(jpe?g|png|gif|bmp|tiff?|webp)$/i.test(name))
+      continue;
+    if (name.toLowerCase() === base)
+      continue;
+    try {
+      fs4.unlinkSync(path.join(dir, name));
+    } catch {
+    }
+  }
 }
 function findZcodeExecutable() {
   return ZCODE_EXE_CANDIDATES.map((p2) => p2).find((p2) => {
@@ -110177,6 +110228,9 @@ async function applyWallpaper(imagePath, opts) {
   if (/\.webp$/i.test(abs)) {
     throw new Error("WebP is not supported by the local decoder \u2014 re-export the image as JPG or PNG and import again.");
   }
+  if (fs5.statSync(abs).size > MAX_WALLPAPER_BYTES) {
+    throw new Error(`image too large (max ${MAX_WALLPAPER_BYTES / 1024 / 1024} MB)`);
+  }
   const stored = loadConfig();
   const config = {
     ...DEFAULT_CONFIG,
@@ -110196,6 +110250,7 @@ async function applyWallpaper(imagePath, opts) {
   if (dest !== abs)
     fs5.copyFileSync(abs, dest);
   const assets = await loadWallpaperCached(dest);
+  cleanStaleWallpapers(dest);
   const payload = buildPayload(config, assets);
   saveConfig({ ...config, wallpaperPath: dest });
   const windows = await applyToZCode(config, payload);
@@ -110641,7 +110696,7 @@ function buildPanelScript(apiPort, token) {
     '    <div class="zb-row zb-grid">' +
     '      <button class="zb-btn" id="zb-fit" title="\u80CC\u666F\u586B\u5145\u65B9\u5F0F:\u586B\u6EE1\u88C1\u526A\u94FA\u6EE1\u7A97\u53E3 / \u5B8C\u6574\u663E\u793A\u4E0D\u88C1\u526A(\u6A21\u7CCA\u57AB\u5E95)/ \u667A\u80FD\u9002\u914D\u81EA\u52A8\u5206\u6790\u753B\u9762\u4E3B\u4F53">\u80CC\u666F\u586B\u5145: \u2026</button>' +
     '      <label class="zb-btn" for="zb-file" title="\u9009\u62E9\u4E00\u5F20\u56FE\u7247\u4F5C\u4E3A\u80CC\u666F\u58C1\u7EB8,UI \u914D\u8272\u968F\u4E4B\u66F4\u65B0(\u652F\u6301 JPG/PNG/GIF/BMP,\u4E0D\u652F\u6301 WebP)">\u66F4\u6362\u56FE\u7247\u2026</label>' +
-    '      <input type="file" id="zb-file" accept="image/jpeg,image/png,image/gif,image/bmp" hidden>' +
+    '      <input type="file" id="zb-file" accept="${ACCEPT_ATTR}" hidden>' +
     '      <button class="zb-btn" id="zb-overlay" title="\u9009\u4E00\u4E2A\u989C\u8272\u53E0\u52A0\u5230\u58C1\u7EB8\u4E0A;\u8C03\u8272\u677F\u91CC\u53EF\u91CD\u7F6E\u6216\u5173\u95ED,\u53F3\u952E\u6309\u94AE\u76F4\u63A5\u53D6\u6D88\u53E0\u52A0">\u53E0\u52A0\u989C\u8272</button>' +
     '      <button class="zb-btn" id="zb-reset" title="\u79FB\u9664\u58C1\u7EB8\u4E0E\u914D\u8272,\u8FD8\u539F ZCode \u9ED8\u8BA4\u5916\u89C2(\u58C1\u7EB8\u4F1A\u88AB\u8BB0\u4F4F,\u53EF\u518D\u6B21\u6062\u590D)">\u8FD8\u539F\u9ED8\u8BA4\u5916\u89C2</button>' +
     '    </div>' +
@@ -110709,14 +110764,19 @@ function buildPanelScript(apiPort, token) {
     h['x-zb-token'] = TOKEN;
     return h;
   }
+  // fetch \u5FC5\u987B\u5E26\u8D85\u65F6:serve \u5355\u7EBF\u7A0B\u89E3\u7801\u5927\u56FE\u65F6\u6574\u6BB5\u65E0\u54CD\u5E94(\u6700\u957F 60s),\u6CA1\u6709
+  // \u8D85\u65F6\u7684\u8BDD\u72B6\u6001\u680F\u6C38\u8FDC\u505C\u5728"\u8BFB\u53D6\u56FE\u7247\u4E2D\u2026",\u79BB\u7EBF\u68C0\u6D4B\u4E5F\u4E0D\u4F1A\u89E6\u53D1\u3002post \u7684 90s
+  // \u8986\u76D6"\u4E0A\u4F20 + 60s \u89E3\u7801\u4E0A\u9650 + \u53D6\u8272"\u7684\u6700\u574F\u94FE\u8DEF;\u72B6\u6001\u8F6E\u8BE2 10s \u5C31\u8BE5\u6709\u56DE\u5E94\u3002
+  var POST_TIMEOUT = 90000, POLL_TIMEOUT = 10000;
+  function isTimeout(e) { return e && (e.name === 'TimeoutError' || e.name === 'AbortError'); }
   function post(path, body, cb) {
-    fetch(API + path, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
+    fetch(API + path, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify(body), signal: AbortSignal.timeout(POST_TIMEOUT) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (d && d.error) { status('\u64CD\u4F5C\u5931\u8D25: ' + d.error); return; }
         if (cb) cb(d);
       })
-      .catch(function () { status('\u65E0\u6CD5\u8FDE\u63A5\u7F8E\u5316\u670D\u52A1 service unreachable'); });
+      .catch(function (e) { status(isTimeout(e) ? '\u670D\u52A1\u54CD\u5E94\u8D85\u65F6,\u8BF7\u7A0D\u540E\u91CD\u8BD5' : '\u65E0\u6CD5\u8FDE\u63A5\u7F8E\u5316\u670D\u52A1 service unreachable'); });
   }
 
   // Local live preview; the server re-injects the authoritative CSS right after.
@@ -110785,7 +110845,7 @@ function buildPanelScript(apiPort, token) {
   }
 
   function refresh() {
-    fetch(API + '/api/config', { headers: auth() })
+    fetch(API + '/api/config', { headers: auth(), signal: AbortSignal.timeout(POLL_TIMEOUT) })
       .then(function (r) { return r.json(); })
       .then(function (c) {
         setOffline(false);
@@ -111038,18 +111098,16 @@ function buildPanelScript(apiPort, token) {
     palStrength = Math.min(100, Math.max(1, v));
     palApply(true);
   });
-  $('zb-pal-reset').addEventListener('click', function () {
-    post('/api/config', { overlayColor: '' }, function () {
-      closePalette();
-      status('\u5DF2\u53D6\u6D88\u989C\u8272\u53E0\u52A0');
-      refresh();
-    });
-  });
+  // \u91CD\u7F6E\u6309\u94AE\u4E0E\u53F3\u952E\u6309\u94AE\u662F\u540C\u4E00\u4E2A\u52A8\u4F5C:\u5173\u8C03\u8272\u677F + \u6E05\u7A7A\u53E0\u52A0\u8272 + \u5237\u65B0\u8BFB\u6570\u3002
+  function cancelOverlay() {
+    closePalette();
+    post('/api/config', { overlayColor: '' }, function () { status('\u5DF2\u53D6\u6D88\u989C\u8272\u53E0\u52A0'); refresh(); });
+  }
+  $('zb-pal-reset').addEventListener('click', cancelOverlay);
   $('zb-pal-close').addEventListener('click', closePalette);
   $('zb-overlay').addEventListener('contextmenu', function (e) {
     e.preventDefault();
-    closePalette();
-    post('/api/config', { overlayColor: '' }, function () { status('\u5DF2\u53D6\u6D88\u989C\u8272\u53E0\u52A0'); refresh(); });
+    cancelOverlay();
   });
 
   $('zb-reset').addEventListener('click', function () {
@@ -111087,7 +111145,7 @@ function buildPanelScript(apiPort, token) {
   }
 
   function refreshStatus() {
-    fetch(API + '/api/status', { headers: auth() })
+    fetch(API + '/api/status', { headers: auth(), signal: AbortSignal.timeout(POLL_TIMEOUT) })
       .then(function (r) { return r.json(); })
       .then(applyStatus)
       .catch(function () { /* the offline banner already covers this */ });
@@ -111181,11 +111239,13 @@ function buildPanelScript(apiPort, token) {
   }
 })();`;
 }
-var PANEL_ROOT_ID;
+var ACCEPT_ATTR, PANEL_ROOT_ID;
 var init_panelScript = __esm({
   "dist/panel/panelScript.js"() {
     "use strict";
     init_colorUtil();
+    init_monet();
+    ACCEPT_ATTR = SUPPORTED_IMAGE_MIME.join(",");
     PANEL_ROOT_ID = "zcode-beautify-panel-root";
   }
 });
@@ -111275,6 +111335,7 @@ async function holdSession(target, config, apiPort, token) {
       source: bootstrap
     });
     session.themeScriptId = identifier;
+    session.lastThemeSource = bootstrap;
     await conn.send("Runtime.evaluate", { expression: bootstrap, returnByValue: true });
     const panelScript = buildPanelScript(apiPort, token);
     await conn.send("Page.addScriptToEvaluateOnNewDocument", { source: panelScript });
@@ -111296,11 +111357,16 @@ async function pushConfigToSessions(config) {
   let ok = 0;
   for (const [id, session] of held) {
     try {
+      if (session.lastThemeSource === bootstrap) {
+        ok++;
+        continue;
+      }
       if (session.themeScriptId) {
         await session.conn.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: session.themeScriptId }).catch(() => {
         });
       }
       session.themeScriptId = await registerScript(session, bootstrap);
+      session.lastThemeSource = bootstrap;
       await session.conn.send("Runtime.evaluate", { expression: bootstrap, returnByValue: true });
       ok++;
     } catch {
@@ -111442,7 +111508,7 @@ async function startServe(opts) {
       if (req.method === "POST" && url.pathname === "/api/wallpaper") {
         const body = JSON.parse(await readBody(req));
         const dataUri = typeof body?.dataUri === "string" ? body.dataUri : "";
-        const m = /^data:(image\/(?:jpeg|png|webp|gif|bmp));base64,(.+)$/.exec(dataUri);
+        const m = new RegExp(`^data:(${MIME_PATTERN});base64,(.+)$`).exec(dataUri);
         if (!m)
           throw new Error("dataUri must be a base64 image data URI");
         if (m[1] === "image/webp") {
@@ -111456,6 +111522,7 @@ async function startServe(opts) {
         fs8.mkdirSync(dataDir(), { recursive: true });
         const dest = path5.join(dataDir(), "wallpaper" + IMAGE_EXT[m[1]]);
         fs8.writeFileSync(dest, bytes);
+        cleanStaleWallpapers(dest);
         invalidateAssetCache();
         await loadWallpaperCached(dest);
         saveConfig(persisted({ ...config, wallpaperPath: dest }));
@@ -111549,13 +111616,14 @@ async function startServe(opts) {
   });
   console.log(`serve: control API on http://127.0.0.1:${apiPort} \u2014 Ctrl+C to stop`);
   console.log(`serve: injecting into ZCode renderers on CDP port ${cdpPort}`);
+  saveConfig({ ...loadConfig(), apiPort });
   await poll(runtimeConfig(), apiPort, token);
   for (; ; ) {
     await new Promise((r2) => setTimeout(r2, POLL_MS));
     await poll(runtimeConfig(), apiPort, token);
   }
 }
-var MAX_WALLPAPER_BYTES, MAX_BODY_BYTES, POLL_MS, runtimeState, nextProcessProbe, held, IMAGE_EXT;
+var POLL_MS, MAX_BODY_BYTES, runtimeState, nextProcessProbe, held, MIME_PATTERN;
 var init_server = __esm({
   "dist/core/server.js"() {
     "use strict";
@@ -111566,19 +111634,12 @@ var init_server = __esm({
     init_launch();
     init_recovery();
     init_autostart();
-    MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
-    MAX_BODY_BYTES = MAX_WALLPAPER_BYTES + 1024 * 1024;
     POLL_MS = 1500;
+    MAX_BODY_BYTES = MAX_WALLPAPER_BYTES + 1024 * 1024;
     runtimeState = { cdpReachable: false, rendererCount: 0, zcodeRunning: false };
     nextProcessProbe = 0;
     held = /* @__PURE__ */ new Map();
-    IMAGE_EXT = {
-      "image/jpeg": ".jpg",
-      "image/png": ".png",
-      "image/webp": ".webp",
-      "image/gif": ".gif",
-      "image/bmp": ".bmp"
-    };
+    MIME_PATTERN = [...SUPPORTED_IMAGE_MIME, "image/webp"].join("|");
   }
 });
 
@@ -112074,12 +112135,7 @@ async function startServeDetached(cdpPort, apiPort) {
 async function watch(port) {
   const { buildPayloadFromConfig: buildPayloadFromConfig2 } = await Promise.resolve().then(() => (init_session(), session_exports));
   const { loadConfig: loadConfig2 } = await Promise.resolve().then(() => (init_launch(), launch_exports));
-  const config = {
-    ...{ port: 9222, blur: 0, dim: 25, monet: true, wallpaperVisible: true, fit: "cover" },
-    ...loadConfig2(),
-    port,
-    fit: loadConfig2().fit ?? "cover"
-  };
+  const config = { ...DEFAULT_CONFIG, ...loadConfig2(), port };
   const payload = await buildPayloadFromConfig2(config);
   let injected = /* @__PURE__ */ new Set();
   console.log(`watching CDP port ${port} \u2014 Ctrl+C to stop`);

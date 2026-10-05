@@ -21,15 +21,22 @@ import {
   pickRendererTargets,
 } from "./cdp.js";
 import { buildPayload, DEFAULT_CONFIG, type BeautifyConfig } from "./inject.js";
-import { invalidateAssetCache, loadWallpaperCached, type WallpaperAssets } from "./monet.js";
+import {
+  IMAGE_EXT,
+  SUPPORTED_IMAGE_MIME,
+  invalidateAssetCache,
+  loadWallpaperCached,
+  MAX_WALLPAPER_BYTES,
+  type WallpaperAssets,
+} from "./monet.js";
 import { buildPanelScript } from "../panel/panelScript.js";
-import { dataDir, isZcodeProcessRunning, loadConfig, relaunchZcode, saveConfig } from "./launch.js";
+import { dataDir, isZcodeProcessRunning, loadConfig, relaunchZcode, saveConfig, cleanStaleWallpapers } from "./launch.js";
 import { applyRecoveryMode, loadRecovery, normalizeMode } from "./recovery.js";
 import { cliEntryPath, getAutostartStatus } from "./autostart.js";
 
-const MAX_WALLPAPER_BYTES = 20 * 1024 * 1024;
-const MAX_BODY_BYTES = MAX_WALLPAPER_BYTES + 1024 * 1024;
 const POLL_MS = 1500;
+// base64 让请求体比图片本体膨胀约 1/3,上限在壁纸本体之外再放 1MB 余量
+const MAX_BODY_BYTES = MAX_WALLPAPER_BYTES + 1024 * 1024;
 
 export interface ServeOptions {
   cdpPort: number;
@@ -39,6 +46,8 @@ export interface ServeOptions {
 interface HeldSession {
   conn: CdpConnection;
   themeScriptId?: string;
+  /** 上一次成功注册的 bootstrap 源码;一致时 pushConfig 不再 remove+add+evaluate。 */
+  lastThemeSource?: string;
 }
 
 /**
@@ -155,6 +164,7 @@ async function holdSession(
       source: bootstrap,
     });
     session.themeScriptId = identifier;
+    session.lastThemeSource = bootstrap;
     await conn.send("Runtime.evaluate", { expression: bootstrap, returnByValue: true });
 
     const panelScript = buildPanelScript(apiPort, token);
@@ -180,12 +190,21 @@ async function pushConfigToSessions(config: BeautifyConfig): Promise<number> {
   let ok = 0;
   for (const [id, session] of held) {
     try {
+      // bootstrap 源码与上次一致(CSS 和壁纸都没变)时,已注册的
+      // addScriptToEvaluateOnNewDocument 和 renderer 内的样式仍然准确,
+      // remove+add+evaluate 全是纯开销 —— 尤其 evaluate 每次都带着整个
+      // 壁纸 dataUri。
+      if (session.lastThemeSource === bootstrap) {
+        ok++;
+        continue;
+      }
       if (session.themeScriptId) {
         await session.conn
           .send("Page.removeScriptToEvaluateOnNewDocument", { identifier: session.themeScriptId })
           .catch(() => {});
       }
       session.themeScriptId = await registerScript(session, bootstrap);
+      session.lastThemeSource = bootstrap;
       await session.conn.send("Runtime.evaluate", { expression: bootstrap, returnByValue: true });
       ok++;
     } catch {
@@ -298,13 +317,9 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
-const IMAGE_EXT: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-  "image/bmp": ".bmp",
-};
+// dataUri 的 MIME 白名单:受支持的格式之外还放行 webp —— 不是为了收它,
+// 而是为了走到下面的专门报错,给用户一句"转成 JPG/PNG"而不是笼统的格式错误。
+const MIME_PATTERN = [...SUPPORTED_IMAGE_MIME, "image/webp"].join("|");
 
 export async function startServe(opts: ServeOptions): Promise<void> {
   const { cdpPort, apiPort } = opts;
@@ -376,7 +391,7 @@ export async function startServe(opts: ServeOptions): Promise<void> {
       if (req.method === "POST" && url.pathname === "/api/wallpaper") {
         const body = JSON.parse(await readBody(req));
         const dataUri = typeof body?.dataUri === "string" ? body.dataUri : "";
-        const m = /^data:(image\/(?:jpeg|png|webp|gif|bmp));base64,(.+)$/.exec(dataUri);
+        const m = new RegExp(`^data:(${MIME_PATTERN});base64,(.+)$`).exec(dataUri);
         if (!m) throw new Error("dataUri must be a base64 image data URI");
         if (m[1] === "image/webp") {
           throw new Error("WebP is not supported by the local decoder — re-export the image as JPG or PNG and import again.");
@@ -389,6 +404,8 @@ export async function startServe(opts: ServeOptions): Promise<void> {
         fs.mkdirSync(dataDir(), { recursive: true });
         const dest = path.join(dataDir(), "wallpaper" + IMAGE_EXT[m[1]]);
         fs.writeFileSync(dest, bytes);
+        // 新图已就位,清掉此前导入留下的旧扩展名副本(如 jpg → png 后的 wallpaper.jpg)
+        cleanStaleWallpapers(dest);
         // 刚覆盖写入的新文件:显式失效再预热,不赌 mtime 粒度。
         // 随后的 pushConfigToSessions → getAssets 会直接命中这份缓存。
         invalidateAssetCache();
@@ -498,6 +515,10 @@ export async function startServe(opts: ServeOptions): Promise<void> {
 
   console.log(`serve: control API on http://127.0.0.1:${apiPort} — Ctrl+C to stop`);
   console.log(`serve: injecting into ZCode renderers on CDP port ${cdpPort}`);
+
+  // 记下实际 apiPort:MCP 的 set_recovery_mode 注册 autostart 时要从配置里
+  // 读它 —— 那边只能硬编码默认值,用户用 --api-port 启动过就会端口错位。
+  saveConfig({ ...loadConfig(), apiPort });
 
   // Initial pass, then keep polling so restarts of the app get re-injected.
   await poll(runtimeConfig(), apiPort, token);

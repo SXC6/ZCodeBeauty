@@ -7,6 +7,13 @@
  * material-color-utilities 0.3.0 schemes lack the newer surfaceContainer*
  * roles, so those are derived from the neutral tonal palette at the official
  * MD3 tones (light: 100/96/94/92/90, dark: 4/10/12/17/22).
+ *
+ * 实测结论(2026-10-05,CDP 同步切类读 computed value,ZCode 渲染器):
+ * ZCode 的 token 值并不随 html.theme-zai-light/-dark 类切换(两个类下
+ * --color-primary/--color-foreground/--color-surface 的计算值完全相同),页面
+ * 里也不存在 .dark 元素 —— 所以 .dark{} 块目前是死代码,Monet 的 :root 覆盖
+ * 在浅/深两种主题下都直接生效。保留它是零成本的兜底:万一 ZCode 改为按类
+ * 换 token 值,深色 scheme 会自动接管,无需再发版。
  */
 
 import { argbToCss } from "./monet.js";
