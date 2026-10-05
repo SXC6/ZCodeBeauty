@@ -4,7 +4,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { applyToZCode, buildPayload, DEFAULT_CONFIG, loadWallpaper, resetZCode, type BeautifyConfig, type BuiltPayload } from "./inject.js";
+import { applyToZCode, buildPayload, DEFAULT_CONFIG, resetZCode, type BeautifyConfig, type BuiltPayload } from "./inject.js";
+import { loadWallpaperCached } from "./monet.js";
 import { dataDir, loadConfig, saveConfig } from "./launch.js";
 
 export interface ApplyOptions {
@@ -56,7 +57,8 @@ export async function applyWallpaper(imagePath: string, opts: ApplyOptions): Pro
   const dest = path.join(dataDir(), "wallpaper" + path.extname(abs).toLowerCase());
   if (dest !== abs) fs.copyFileSync(abs, dest);
 
-  const assets = await loadWallpaper(dest);
+  // dest 是刚复制/覆盖出来的新文件,mtime 必然变化,缓存按未命中重载。
+  const assets = await loadWallpaperCached(dest);
   const payload = buildPayload(config, assets);
   // Persist first: even if the app is not running yet, `launch` + `refresh_theme`
   // can pick the stored theme up later.
@@ -85,6 +87,15 @@ export async function applyColorsOnly(opts: ApplyOptions): Promise<number> {
   return applyToZCode(config, await buildPayloadFromConfig(config));
 }
 
+/**
+ * 还原默认外观。注意一个已知限制:serve 守护进程感知不到这里的 reset ——
+ * 控制 API 由每次启动随机生成的 token 保护,CLI/MCP 拿不到它,无法转发。
+ * reset 脚本会清掉 localStorage 里的主题副本(防 self-heal 复活),但 serve
+ * 自己持有的 addScriptToEvaluateOnNewDocument 注册要等下一次 config 推送才
+ * 更新,所以 serve 运行期间重载 renderer 仍会注回旧主题。serve 在跑时用户
+ * 一般走面板的还原按钮(那条路径完全同步),这条缝隙只影响"serve 常驻 +
+ * CLI reset"的组合,记录在案。
+ */
 export async function resetAppearance(port?: number): Promise<number> {
   const stored = loadConfig();
   await resetZCode(port ?? stored.port ?? DEFAULT_CONFIG.port);
@@ -95,7 +106,7 @@ export async function resetAppearance(port?: number): Promise<number> {
 export async function buildPayloadFromConfig(config: BeautifyConfig): Promise<BuiltPayload> {
   let assets;
   if (config.wallpaperPath && fs.existsSync(config.wallpaperPath)) {
-    assets = await loadWallpaper(config.wallpaperPath);
+    assets = await loadWallpaperCached(config.wallpaperPath);
   }
   return buildPayload(config, assets);
 }

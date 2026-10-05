@@ -9,6 +9,8 @@
  * injection or reload.
  */
 
+import { hexToRgb, hsvToHex, rgbToHsv } from "./colorUtil.js";
+
 export const PANEL_ROOT_ID = "zcode-beautify-panel-root";
 
 export function buildPanelScript(apiPort: number, token: string): string {
@@ -163,7 +165,8 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '      <button class="zb-btn" id="zb-overlay" title="选一个颜色叠加到壁纸上;调色板里可重置或关闭,右键按钮直接取消叠加">叠加颜色</button>' +
     '      <button class="zb-btn" id="zb-reset" title="移除壁纸与配色,还原 ZCode 默认外观(壁纸会被记住,可再次恢复)">还原默认外观</button>' +
     '    </div>' +
-    '    <div class="zb-row" style="border-top:1px solid rgba(255,255,255,.1);padding-top:8px">' +
+    // 分隔线必须用主题变量:早前写死的 rgba(255,255,255,.1) 在浅色主题下不可见。
+    '    <div class="zb-row" style="border-top:1px solid var(--zb-line-soft);padding-top:8px">' +
     '      <label title="ZCode 每次重启都会丢掉壁纸和配色,这里决定由谁来把它们恢复回来"><span>自动恢复</span></label>' +
     '      <select id="zb-recovery">' +
     '        <option value="off">关闭</option>' +
@@ -402,11 +405,16 @@ export function buildPanelScript(apiPort: number, token: string): string {
       var scale = Math.min(1, MAXP / Math.max(img.naturalWidth, img.naturalHeight));
       var w = Math.max(1, Math.round(img.naturalWidth * scale));
       var h = Math.max(1, Math.round(img.naturalHeight * scale));
-      var canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      status('大图已压缩,应用中…');
+    var canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    // JPEG 没有 alpha 通道,canvas 未填充的像素按透明黑编码成黑色:带透明的
+    // PNG 大图(插画、抠图)导入后会整体垫上黑底,所以先铺白底再画图。
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    status('大图已压缩,应用中…');
       send(canvas.toDataURL('image/jpeg', 0.92), (f.name || 'wallpaper').replace(/\.[^.]+$/, '') + '.jpg');
     };
     img.onerror = function () { URL.revokeObjectURL(url); status('图片读取失败,请换一张试试'); };
@@ -424,32 +432,12 @@ export function buildPanelScript(apiPort: number, token: string): string {
   var palOn = false;    // false = palette mirrors "no overlay" (readout 0%)
   var palPushTimer = null;
 
-  function hsvToHex(h, s, v) {
-    // f is the fractional position WITHIN the 60° sector: both floors divide
-    // h by 60. (floor(h) alone made f hugely negative for h ≥ 60 and garbage
-    // bytes for every color whose hue wrapped past the first sector — the
-    // quick picks looked nothing like their chip.)
-    var i = Math.floor(h / 60) % 6, f = h / 60 - Math.floor(h / 60);
-    var p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
-    var rgb = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i];
-    return '#' + rgb.map(function (c) { return ('0' + Math.round(c * 255).toString(16)).slice(-2); }).join('').toUpperCase();
-  }
-  function hexToRgb(hex) {
-    var n = parseInt(hex.slice(1), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-  function rgbToHsv(r, g, b) {
-    r /= 255; g /= 255; b /= 255;
-    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-    var h = 0;
-    if (d > 0) {
-      if (max === r) h = 60 * (((g - b) / d) % 6);
-      else if (max === g) h = 60 * ((b - r) / d + 2);
-      else h = 60 * ((r - g) / d + 4);
-    }
-    if (h < 0) h += 360;
-    return [h, max === 0 ? 0 : d / max, max];
-  }
+  // 颜色换算逻辑在 src/panel/colorUtil.ts 里维护并可单测,这里按源码内联。
+  // 三个函数必须保持零外部引用(见 colorUtil.ts 顶部说明),否则 toString()
+  // 内联出来的副本在面板里会因缺依赖而崩。
+  var hsvToHex = ${hsvToHex.toString()};
+  var hexToRgb = ${hexToRgb.toString()};
+  var rgbToHsv = ${rgbToHsv.toString()};
   function palApply(push) {
     var hex = hsvToHex(palH, palS, palV);
     $('zb-sv').style.backgroundColor = 'hsl(' + Math.round(palH) + ',100%,50%)';
@@ -586,13 +574,10 @@ export function buildPanelScript(apiPort: number, token: string): string {
 
   $('zb-reset').addEventListener('click', function () {
     var mode = this.getAttribute('data-mode') || 'reset';
+    // localStorage 的清理由 serve 端的 reset 脚本统一负责(含 CLI/MCP 路径),
+    // 面板不再自己动手 —— 两处各清一遍迟早会漂移。
     post(mode === 'restore' ? '/api/restore' : '/api/reset', {}, function () {
-      if (mode === 'reset') {
-        try { localStorage.removeItem('zcode-beautify:css'); localStorage.removeItem('zcode-beautify:wallpaper'); } catch (e) {}
-        status('已还原默认外观');
-      } else {
-        status('已恢复你的壁纸');
-      }
+      status(mode === 'restore' ? '已恢复你的壁纸' : '已还原默认外观');
       refresh();
     });
   });

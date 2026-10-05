@@ -47,7 +47,7 @@ If they want to beautify a non-ZCode app or develop their own → read
 
 ## What you are installing
 
-`zcode-beautify` v0.7.3 — a ZCode plugin that adds a wallpaper layer +
+`zcode-beautify` v0.7.4 — a ZCode plugin that adds a wallpaper layer +
 Material Design 3 (Monet) dynamic color to the ZCode desktop client over CDP,
 with a `/beautify` slash command, MCP tools (`set_background`, `apply_options`,
 `refresh_theme`, `reset_appearance`, `beautify_status`, `recovery_status`,

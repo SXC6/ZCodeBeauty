@@ -4,6 +4,7 @@
  * quantization (Celebi), scoring and scheme generation.
  */
 
+import fs from "node:fs";
 import { Jimp } from "jimp";
 import {
   QuantizerCelebi,
@@ -81,6 +82,31 @@ export async function loadWallpaper(imagePath: string, maxDimension = MAX_WIDTH)
   const dataUri = `data:image/jpeg;base64,${jpeg.toString("base64")}`;
 
   return { dataUri, sourceArgb, theme, focus };
+}
+
+// 解码 + Monet 取色 + JPEG 重编码对同一张壁纸是纯函数,进程内按 file+mtime
+// 缓存一份。以前只有 serve 进程有这份缓存,MCP/CLI 每次调参(比如模型连着
+// 微调 blur)都要重付 0.5-1s 的全量解码账单。serve 与一次性 CLI/MCP 进程各自
+// 持有一份,以 mtime 为准,互不冲突。
+let assetCache: { file: string; mtimeMs: number; assets: WallpaperAssets } | undefined;
+
+/** 带缓存的 loadWallpaper:同一文件未变化时直接复用上次的解码与取色结果。 */
+export async function loadWallpaperCached(imagePath: string, maxDimension = MAX_WIDTH): Promise<WallpaperAssets> {
+  const mtimeMs = fs.statSync(imagePath).mtimeMs;
+  if (assetCache?.file === imagePath && assetCache.mtimeMs === mtimeMs) {
+    return assetCache.assets;
+  }
+  const assets = await loadWallpaper(imagePath, maxDimension);
+  assetCache = { file: imagePath, mtimeMs, assets };
+  return assets;
+}
+
+/**
+ * 强制丢弃缓存。正常路径靠 mtime 变化即可失效;刚用 writeFileSync 覆盖写入
+ * 新壁纸时显式调一次,不赌文件系统的时间戳粒度。
+ */
+export function invalidateAssetCache(): void {
+  assetCache = undefined;
 }
 
 /**

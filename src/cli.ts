@@ -24,10 +24,14 @@ const USAGE = `zcode-beautify <command> [options]
 
 Commands:
   launch [--port N]              Start ZCode with --remote-debugging-port=N
-  apply <image> [options]        Set wallpaper and adapt colors
-    --blur <px>                  Blur the wallpaper (default 0)
-    --dim <0-100>                Darken the wallpaper (default 25)
-    --fit <mode>                 cover | contain | smart (default cover)
+  apply <image> [options]        Set wallpaper and adapt colors; options left
+                                 out keep their current setting
+    --blur <px>                  Wallpaper blur radius
+    --dim <0-100>                Darken the wallpaper
+    --transparency <0-100>       Overall UI translucency (50 = the shipped look)
+    --fit <mode>                 cover | contain | smart
+    --overlay-color <#rrggbb|none>  Blend a color over the wallpaper ("none" clears it)
+    --overlay-strength <1-100>   Overlay tint strength
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
   colors [--port N] [--blur <px>] [--dim <0-100>] [--transparency <0-100>]
@@ -48,6 +52,70 @@ Commands:
 
 function autostartSpec(cdpPort: number, apiPort = 9223): AutostartSpec {
   return { nodePath: process.execPath, cliPath: cliEntryPath(), cdpPort, apiPort };
+}
+
+/**
+ * 解析 apply / colors 共用的外观参数。未传入的字段保持 undefined:调用方
+ * (applyWallpaper / applyColorsOnly)的 `opts.x ?? stored.x ?? default` 链
+ * 会把它解释为"沿用当前设置"——以前 apply 总是传硬编码默认值,一次换图就把
+ * 用户在面板里调好的 blur/dim/monet 全部打回出厂,与 colors、MCP 的语义相悖。
+ * 多个参数同时非法时只报第一个:逐个修比一次看一屏错误更接近 CLI 的使用节奏。
+ */
+function parseLookFlags(rest: string[]): { opts: ApplyOptions; error?: string } {
+  const flag = (name: string): string | undefined => {
+    const i = rest.indexOf(name);
+    return i >= 0 && i + 1 < rest.length ? rest[i + 1] : undefined;
+  };
+  const opts: ApplyOptions = {};
+  let error: string | undefined;
+
+  const num = (name: string, min: number, max: number): number | undefined => {
+    const raw = flag(name);
+    if (raw === undefined) return undefined;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < min || n > max) {
+      error ??= `Invalid ${name} "${raw}". Use a number from ${min} to ${max}.`;
+      return undefined;
+    }
+    return n;
+  };
+  const blur = num("--blur", 0, 100);
+  if (blur !== undefined) opts.blur = blur;
+  const dim = num("--dim", 0, 100);
+  if (dim !== undefined) opts.dim = dim;
+  const transparency = num("--transparency", 0, 100);
+  if (transparency !== undefined) opts.transparency = transparency;
+
+  const fit = flag("--fit");
+  if (fit !== undefined) {
+    if (fit === "cover" || fit === "contain" || fit === "smart") opts.fit = fit;
+    else error ??= `Invalid --fit "${fit}". Use one of: cover, contain, smart.`;
+  }
+
+  const rawOverlay = flag("--overlay-color");
+  if (rawOverlay !== undefined) {
+    // "none" 是清空叠加的入口——0% 强度不是合法值,"off" 只能用空色表达。
+    if (rawOverlay === "none") opts.overlayColor = "";
+    else if (/^#[0-9a-fA-F]{6}$/.test(rawOverlay)) opts.overlayColor = rawOverlay;
+    else error ??= `Invalid --overlay-color "${rawOverlay}". Use #rrggbb or "none".`;
+  }
+
+  const rawStrength = flag("--overlay-strength");
+  if (rawStrength !== undefined) {
+    const n = Number(rawStrength);
+    // 与其他范围参数不同,1-100 的下限是语义而非边界:0% 不是"没有叠加",
+    // 清除叠加要走 --overlay-color none。
+    if (!Number.isFinite(n) || n < 1 || n > 100) {
+      error ??= `Invalid --overlay-strength "${rawStrength}". Use a number from 1 to 100 ` +
+        `(0% means "no overlay" — clear it with --overlay-color none instead).`;
+    } else opts.overlayStrength = n;
+  }
+
+  // 只有显式给出 --no-monet 才覆盖;没有"强制开启"的反向 flag,保持 undefined
+  // 让已存的 monet 设置原样生效。
+  if (rest.includes("--no-monet")) opts.monet = false;
+
+  return { opts, error };
 }
 
 async function main(): Promise<void> {
@@ -80,7 +148,10 @@ async function main(): Promise<void> {
       case "apply": {
         // Positional scan that skips flag names *and their values*, so
         // `apply --dim 30 pic.jpg` finds "pic.jpg" instead of "30".
-        const valueFlags = new Set(["--blur", "--dim", "--fit", "--port"]);
+        const valueFlags = new Set([
+          "--blur", "--dim", "--fit", "--port",
+          "--transparency", "--overlay-color", "--overlay-strength",
+        ]);
         let image: string | undefined;
         for (let i = 0; i < rest.length; i++) {
           if (valueFlags.has(rest[i])) {
@@ -91,81 +162,30 @@ async function main(): Promise<void> {
           image = rest[i];
           break;
         }
-        const fit = flag("--fit");
-        if (fit && !["cover", "contain", "smart"].includes(fit)) {
-          console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
-          process.exitCode = 1;
-          return;
-        }
         if (!image) {
           console.error(USAGE);
           process.exitCode = 1;
           return;
         }
-        const { windows } = await applyWallpaper(image, {
-          port,
-          blur: Number(flag("--blur") ?? 0),
-          dim: Number(flag("--dim") ?? 25),
-          monet: !has("--no-monet"),
-          fit: fit as ApplyOptions["fit"],
-        });
+        const { opts, error } = parseLookFlags(rest);
+        if (error) {
+          console.error(error);
+          process.exitCode = 1;
+          return;
+        }
+        const { windows } = await applyWallpaper(image, { port, ...opts });
         console.log(`Applied wallpaper + theme to ${windows} window(s).`);
         break;
       }
       case "colors": {
-        const rawTransparency = flag("--transparency");
-        let transparency: number | undefined;
-        if (rawTransparency !== undefined) {
-          transparency = Number(rawTransparency);
-          if (!Number.isFinite(transparency) || transparency < 0 || transparency > 100) {
-            console.error(`Invalid --transparency "${rawTransparency}". Use a number from 0 to 100 (50 = the shipped look).`);
-            process.exitCode = 1;
-            return;
-          }
-        }
-        const rawBlur = flag("--blur");
-        const rawDim = flag("--dim");
-        const rawOverlay = flag("--overlay-color");
-        let overlayColor: string | undefined;
-        if (rawOverlay !== undefined) {
-          if (rawOverlay === "none") overlayColor = "";
-          else if (/^#[0-9a-fA-F]{6}$/.test(rawOverlay)) overlayColor = rawOverlay;
-          else {
-            console.error(`Invalid --overlay-color "${rawOverlay}". Use #rrggbb or "none".`);
-            process.exitCode = 1;
-            return;
-          }
-        }
-        const rawStrength = flag("--overlay-strength");
-        let overlayStrength: number | undefined;
-        if (rawStrength !== undefined) {
-          overlayStrength = Number(rawStrength);
-          if (!Number.isFinite(overlayStrength) || overlayStrength < 1 || overlayStrength > 100) {
-            console.error(
-              `Invalid --overlay-strength "${rawStrength}". Use a number from 1 to 100 ` +
-                `(0% means "no overlay" — clear it with --overlay-color none instead).`
-            );
-            process.exitCode = 1;
-            return;
-          }
-        }
-        const fit = flag("--fit");
-        if (fit && !["cover", "contain", "smart"].includes(fit)) {
-          console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
+        const { opts, error } = parseLookFlags(rest);
+        if (error) {
+          console.error(error);
           process.exitCode = 1;
           return;
         }
         const { applyColorsOnly } = await import("./core/session.js");
-        const windows = await applyColorsOnly({
-          port,
-          transparency,
-          blur: rawBlur !== undefined ? Number(rawBlur) : undefined,
-          dim: rawDim !== undefined ? Number(rawDim) : undefined,
-          monet: has("--no-monet") ? false : undefined,
-          fit: fit as ApplyOptions["fit"],
-          overlayColor,
-          overlayStrength,
-        });
+        const windows = await applyColorsOnly({ port, ...opts });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;
       }

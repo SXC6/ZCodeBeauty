@@ -205,5 +205,12 @@ export function buildResetScript(marker = "zcode-beautify"): string {
   document.getElementById(${JSON.stringify(marker)} + '-wallpaper')?.remove();
   document.getElementById(${JSON.stringify(marker)} + '-backdrop')?.remove();
   if (window.__zcodeBeautify) { window.__zcodeBeautify.cssText = null; }
+  // localStorage 里的主题副本必须一并清掉:面板脚本的 self-heal 路径会在下次
+  // 页面重载时把它原样捡回来,reset 就"复活"了。以前只有面板按钮路径手动清,
+  // CLI / MCP 的 reset 从来没人清 —— 统一放进 reset 脚本,所有路径共用。
+  try {
+    localStorage.removeItem(${JSON.stringify(marker)} + ':css');
+    localStorage.removeItem(${JSON.stringify(marker)} + ':wallpaper');
+  } catch (e) {}
 })();`;
 }

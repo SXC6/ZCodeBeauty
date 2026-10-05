@@ -7199,12 +7199,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f2;
     };
-    function addFormats(ajv, list, fs7, exportName) {
+    function addFormats(ajv, list, fs8, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f2 of list)
-        ajv.addFormat(f2, fs7[f2]);
+        ajv.addFormat(f2, fs8[f2]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -11196,7 +11196,7 @@ var require_gifframe = __commonJS({
 var require_gifutil = __commonJS({
   "node_modules/gifwrap/src/gifutil.js"(exports) {
     "use strict";
-    var fs7 = __require("fs");
+    var fs8 = __require("fs");
     var ImageQ = require_image_q();
     var BitmapImage2 = require_bitmapimage();
     var { GifFrame: GifFrame2 } = require_gifframe();
@@ -11392,7 +11392,7 @@ var require_gifutil = __commonJS({
     }
     function _readBinary(path5) {
       return new Promise((resolve, reject) => {
-        fs7.readFile(path5, (err, buffer) => {
+        fs8.readFile(path5, (err, buffer) => {
           if (err) {
             return reject(err);
           }
@@ -11402,7 +11402,7 @@ var require_gifutil = __commonJS({
     }
     function _writeBinary(path5, buffer) {
       return new Promise((resolve, reject) => {
-        fs7.writeFile(path5, buffer, (err) => {
+        fs8.writeFile(path5, buffer, (err) => {
           if (err) {
             return reject(err);
           }
@@ -65984,7 +65984,7 @@ var StdioServerTransport = class {
 };
 
 // dist/core/session.js
-import fs4 from "node:fs";
+import fs5 from "node:fs";
 import path2 from "node:path";
 
 // dist/core/cdp.js
@@ -66150,8 +66150,18 @@ function buildResetScript(marker = "zcode-beautify") {
   document.getElementById(${JSON.stringify(marker)} + '-wallpaper')?.remove();
   document.getElementById(${JSON.stringify(marker)} + '-backdrop')?.remove();
   if (window.__zcodeBeautify) { window.__zcodeBeautify.cssText = null; }
+  // localStorage \u91CC\u7684\u4E3B\u9898\u526F\u672C\u5FC5\u987B\u4E00\u5E76\u6E05\u6389:\u9762\u677F\u811A\u672C\u7684 self-heal \u8DEF\u5F84\u4F1A\u5728\u4E0B\u6B21
+  // \u9875\u9762\u91CD\u8F7D\u65F6\u628A\u5B83\u539F\u6837\u6361\u56DE\u6765,reset \u5C31"\u590D\u6D3B"\u4E86\u3002\u4EE5\u524D\u53EA\u6709\u9762\u677F\u6309\u94AE\u8DEF\u5F84\u624B\u52A8\u6E05,
+  // CLI / MCP \u7684 reset \u4ECE\u6765\u6CA1\u4EBA\u6E05 \u2014\u2014 \u7EDF\u4E00\u653E\u8FDB reset \u811A\u672C,\u6240\u6709\u8DEF\u5F84\u5171\u7528\u3002
+  try {
+    localStorage.removeItem(${JSON.stringify(marker)} + ':css');
+    localStorage.removeItem(${JSON.stringify(marker)} + ':wallpaper');
+  } catch (e) {}
 })();`;
 }
+
+// dist/core/monet.js
+import fs3 from "node:fs";
 
 // node_modules/bmp-ts/dist/esm/header-types.js
 var HeaderTypes;
@@ -144354,6 +144364,16 @@ async function loadWallpaper(imagePath, maxDimension = MAX_WIDTH) {
   const dataUri = `data:image/jpeg;base64,${jpeg2.toString("base64")}`;
   return { dataUri, sourceArgb, theme, focus };
 }
+var assetCache;
+async function loadWallpaperCached(imagePath, maxDimension = MAX_WIDTH) {
+  const mtimeMs = fs3.statSync(imagePath).mtimeMs;
+  if (assetCache?.file === imagePath && assetCache.mtimeMs === mtimeMs) {
+    return assetCache.assets;
+  }
+  const assets = await loadWallpaper(imagePath, maxDimension);
+  assetCache = { file: imagePath, mtimeMs, assets };
+  return assets;
+}
 function analyzeFocus(bitmap) {
   const { width, height, data } = bitmap;
   const aspect = width / height;
@@ -144593,7 +144613,9 @@ function buildPayload(config2, assets) {
   const focusX = config2.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
   const focusY = config2.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
-  parts.push(pageTransparentCss());
+  if (assets) {
+    parts.push(pageTransparentCss());
+  }
   parts.push(backdropLayerCss());
   if (config2.wallpaperVisible) {
     parts.push(wallpaperLayerCss(config2, resolved, position));
@@ -144653,7 +144675,7 @@ async function resetZCode(port) {
 // dist/core/launch.js
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import fs3 from "node:fs";
+import fs4 from "node:fs";
 import os from "node:os";
 import path from "node:path";
 function dataDir() {
@@ -144662,7 +144684,7 @@ function dataDir() {
     return override;
   const root = path.join(os.homedir(), ".zcode", "cli", "plugins", "data");
   const pluginScoped = path.join(root, "zcode-beautify@zcode-beautify");
-  if (fs3.existsSync(pluginScoped))
+  if (fs4.existsSync(pluginScoped))
     return pluginScoped;
   return path.join(root, "zcode-beautify");
 }
@@ -144671,14 +144693,19 @@ function configFile() {
 }
 function loadConfig() {
   try {
-    return JSON.parse(fs3.readFileSync(configFile(), "utf8"));
+    return JSON.parse(fs4.readFileSync(configFile(), "utf8"));
   } catch {
     return {};
   }
 }
+function atomicWriteJson(file2, data) {
+  const tmp = `${file2}.tmp`;
+  fs4.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs4.renameSync(tmp, file2);
+}
 function saveConfig(config2) {
-  fs3.mkdirSync(dataDir(), { recursive: true });
-  fs3.writeFileSync(configFile(), JSON.stringify(config2, null, 2));
+  fs4.mkdirSync(dataDir(), { recursive: true });
+  atomicWriteJson(configFile(), config2);
 }
 var ZCODE_EXE_CANDIDATES = process.platform === "win32" ? [
   process.env.ZCODE_WINDOWS_APP_INSTALL_DIR ? path.join(process.env.ZCODE_WINDOWS_APP_INSTALL_DIR, "ZCode.exe") : void 0,
@@ -144688,7 +144715,7 @@ var ZCODE_EXE_CANDIDATES = process.platform === "win32" ? [
 function findZcodeExecutable() {
   return ZCODE_EXE_CANDIDATES.map((p2) => p2).find((p2) => {
     try {
-      return fs3.statSync(p2).isFile();
+      return fs4.statSync(p2).isFile();
     } catch {
       return false;
     }
@@ -144735,7 +144762,7 @@ if ($found) { $found[0] }
     if (!found)
       return void 0;
     try {
-      return fs3.statSync(found).isFile() ? found : void 0;
+      return fs4.statSync(found).isFile() ? found : void 0;
     } catch {
       return void 0;
     }
@@ -144760,7 +144787,7 @@ async function reapplyStored() {
 }
 async function applyWallpaper(imagePath, opts) {
   const abs = path2.resolve(imagePath);
-  if (!fs4.existsSync(abs))
+  if (!fs5.existsSync(abs))
     throw new Error(`Image not found: ${abs}`);
   if (/\.webp$/i.test(abs)) {
     throw new Error("WebP is not supported by the local decoder \u2014 re-export the image as JPG or PNG and import again.");
@@ -144779,11 +144806,11 @@ async function applyWallpaper(imagePath, opts) {
     overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
     overlayStrength: opts.overlayStrength ?? stored.overlayStrength ?? DEFAULT_CONFIG.overlayStrength
   };
-  fs4.mkdirSync(dataDir(), { recursive: true });
+  fs5.mkdirSync(dataDir(), { recursive: true });
   const dest = path2.join(dataDir(), "wallpaper" + path2.extname(abs).toLowerCase());
   if (dest !== abs)
-    fs4.copyFileSync(abs, dest);
-  const assets = await loadWallpaper(dest);
+    fs5.copyFileSync(abs, dest);
+  const assets = await loadWallpaperCached(dest);
   const payload = buildPayload(config2, assets);
   saveConfig({ ...config2, wallpaperPath: dest });
   const windows = await applyToZCode(config2, payload);
@@ -144815,8 +144842,8 @@ async function resetAppearance(port) {
 }
 async function buildPayloadFromConfig(config2) {
   let assets;
-  if (config2.wallpaperPath && fs4.existsSync(config2.wallpaperPath)) {
-    assets = await loadWallpaper(config2.wallpaperPath);
+  if (config2.wallpaperPath && fs5.existsSync(config2.wallpaperPath)) {
+    assets = await loadWallpaperCached(config2.wallpaperPath);
   }
   return buildPayload(config2, assets);
 }
@@ -144826,7 +144853,7 @@ function mergedConfig() {
 }
 
 // dist/core/autostart.js
-import fs5 from "node:fs";
+import fs6 from "node:fs";
 import os2 from "node:os";
 import path3 from "node:path";
 var AUTOSTART_ID = "zcode-beautify";
@@ -144952,28 +144979,28 @@ function getAutostartStatus() {
   if (!entryPath) {
     return { platform, supported: false, installed: false, note: `autostart is not implemented for ${platform}` };
   }
-  return { platform, supported: true, installed: fs5.existsSync(entryPath), entryPath };
+  return { platform, supported: true, installed: fs6.existsSync(entryPath), entryPath };
 }
 function installAutostart(spec) {
   const entryPath = autostartEntryPath();
   if (!entryPath)
     return getAutostartStatus();
   const script = process.platform === "win32" ? windowsScript(spec) : process.platform === "darwin" ? macosScript(spec) : linuxScript(spec);
-  fs5.mkdirSync(path3.dirname(entryPath), { recursive: true });
-  fs5.writeFileSync(autostartShimPath(), SHIM_SOURCE);
-  fs5.writeFileSync(entryPath, script);
+  fs6.mkdirSync(path3.dirname(entryPath), { recursive: true });
+  fs6.writeFileSync(autostartShimPath(), SHIM_SOURCE);
+  fs6.writeFileSync(entryPath, script);
   return getAutostartStatus();
 }
 function uninstallAutostart() {
   const entryPath = autostartEntryPath();
   if (!entryPath)
     return getAutostartStatus();
-  fs5.rmSync(entryPath, { force: true });
+  fs6.rmSync(entryPath, { force: true });
   return getAutostartStatus();
 }
 
 // dist/core/recovery.js
-import fs6 from "node:fs";
+import fs7 from "node:fs";
 import path4 from "node:path";
 var RECOVERY_MODES = ["off", "on-start", "always"];
 var DEFAULT_RECOVERY_MODE = "on-start";
@@ -144985,15 +145012,15 @@ function recoveryFile() {
 }
 function loadRecovery() {
   try {
-    const raw = JSON.parse(fs6.readFileSync(recoveryFile(), "utf8"));
+    const raw = JSON.parse(fs7.readFileSync(recoveryFile(), "utf8"));
     return { mode: normalizeMode(raw.mode) ?? DEFAULT_RECOVERY_MODE, updatedAt: raw.updatedAt };
   } catch {
     return { mode: DEFAULT_RECOVERY_MODE };
   }
 }
 function saveRecovery(config2) {
-  fs6.mkdirSync(dataDir(), { recursive: true });
-  fs6.writeFileSync(recoveryFile(), JSON.stringify(config2, null, 2));
+  fs7.mkdirSync(dataDir(), { recursive: true });
+  atomicWriteJson(recoveryFile(), config2);
 }
 function setRecoveryMode(mode) {
   const next = { mode, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
@@ -145184,7 +145211,7 @@ async function repairLaunchers(opts) {
 // dist/mcp/server.js
 var server = new McpServer({
   name: "zcode-beautify",
-  version: "0.7.3"
+  version: "0.7.4"
 });
 server.registerTool("set_background", {
   title: "Set ZCode wallpaper",

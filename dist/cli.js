@@ -152,6 +152,13 @@ function buildResetScript(marker = "zcode-beautify") {
   document.getElementById(${JSON.stringify(marker)} + '-wallpaper')?.remove();
   document.getElementById(${JSON.stringify(marker)} + '-backdrop')?.remove();
   if (window.__zcodeBeautify) { window.__zcodeBeautify.cssText = null; }
+  // localStorage \u91CC\u7684\u4E3B\u9898\u526F\u672C\u5FC5\u987B\u4E00\u5E76\u6E05\u6389:\u9762\u677F\u811A\u672C\u7684 self-heal \u8DEF\u5F84\u4F1A\u5728\u4E0B\u6B21
+  // \u9875\u9762\u91CD\u8F7D\u65F6\u628A\u5B83\u539F\u6837\u6361\u56DE\u6765,reset \u5C31"\u590D\u6D3B"\u4E86\u3002\u4EE5\u524D\u53EA\u6709\u9762\u677F\u6309\u94AE\u8DEF\u5F84\u624B\u52A8\u6E05,
+  // CLI / MCP \u7684 reset \u4ECE\u6765\u6CA1\u4EBA\u6E05 \u2014\u2014 \u7EDF\u4E00\u653E\u8FDB reset \u811A\u672C,\u6240\u6709\u8DEF\u5F84\u5171\u7528\u3002
+  try {
+    localStorage.removeItem(${JSON.stringify(marker)} + ':css');
+    localStorage.removeItem(${JSON.stringify(marker)} + ':wallpaper');
+  } catch (e) {}
 })();`;
 }
 var CdpError, CdpConnection;
@@ -6033,7 +6040,7 @@ var require_gifframe = __commonJS({
 var require_gifutil = __commonJS({
   "node_modules/gifwrap/src/gifutil.js"(exports) {
     "use strict";
-    var fs9 = __require("fs");
+    var fs10 = __require("fs");
     var ImageQ = require_image_q();
     var BitmapImage2 = require_bitmapimage();
     var { GifFrame: GifFrame2 } = require_gifframe();
@@ -6229,7 +6236,7 @@ var require_gifutil = __commonJS({
     }
     function _readBinary(path7) {
       return new Promise((resolve, reject) => {
-        fs9.readFile(path7, (err, buffer) => {
+        fs10.readFile(path7, (err, buffer) => {
           if (err) {
             return reject(err);
           }
@@ -6239,7 +6246,7 @@ var require_gifutil = __commonJS({
     }
     function _writeBinary(path7, buffer) {
       return new Promise((resolve, reject) => {
-        fs9.writeFile(path7, buffer, (err) => {
+        fs10.writeFile(path7, buffer, (err) => {
           if (err) {
             return reject(err);
           }
@@ -109580,6 +109587,7 @@ var init_material_color_utilities = __esm({
 });
 
 // dist/core/monet.js
+import fs3 from "node:fs";
 async function readImage(imagePath) {
   let timeoutReject;
   const timer = setTimeout(() => timeoutReject?.(new Error(`decoding timed out after ${DECODE_TIMEOUT_MS / 1e3}s`)), DECODE_TIMEOUT_MS);
@@ -109608,6 +109616,18 @@ async function loadWallpaper(imagePath, maxDimension = MAX_WIDTH) {
   const jpeg2 = await image2.getBuffer("image/jpeg", { quality: JPEG_QUALITY });
   const dataUri = `data:image/jpeg;base64,${jpeg2.toString("base64")}`;
   return { dataUri, sourceArgb, theme, focus };
+}
+async function loadWallpaperCached(imagePath, maxDimension = MAX_WIDTH) {
+  const mtimeMs = fs3.statSync(imagePath).mtimeMs;
+  if (assetCache?.file === imagePath && assetCache.mtimeMs === mtimeMs) {
+    return assetCache.assets;
+  }
+  const assets = await loadWallpaper(imagePath, maxDimension);
+  assetCache = { file: imagePath, mtimeMs, assets };
+  return assets;
+}
+function invalidateAssetCache() {
+  assetCache = void 0;
 }
 function analyzeFocus(bitmap) {
   const { width, height, data } = bitmap;
@@ -109674,7 +109694,7 @@ function toHex2(v) {
 function round2(v) {
   return Math.round(v * 100) / 100;
 }
-var MAX_WIDTH, JPEG_QUALITY, DECODE_TIMEOUT_MS;
+var MAX_WIDTH, JPEG_QUALITY, DECODE_TIMEOUT_MS, assetCache;
 var init_monet = __esm({
   "dist/core/monet.js"() {
     "use strict";
@@ -109853,7 +109873,9 @@ function buildPayload(config, assets) {
   const focusX = config.fit === "smart" ? assets?.focus.x ?? 0.5 : 0.5;
   const focusY = config.fit === "smart" ? assets?.focus.y ?? 0.5 : 0.5;
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
-  parts.push(pageTransparentCss());
+  if (assets) {
+    parts.push(pageTransparentCss());
+  }
   parts.push(backdropLayerCss());
   if (config.wallpaperVisible) {
     parts.push(wallpaperLayerCss(config, resolved, position));
@@ -109914,7 +109936,6 @@ var init_inject = __esm({
   "dist/core/inject.js"() {
     "use strict";
     init_cdp();
-    init_monet();
     init_tokens();
     BLUR_DAMPING = 0.3;
     DEFAULT_OVERLAY_STRENGTH = 45;
@@ -109935,6 +109956,7 @@ var init_inject = __esm({
 // dist/core/launch.js
 var launch_exports = {};
 __export(launch_exports, {
+  atomicWriteJson: () => atomicWriteJson,
   configFile: () => configFile,
   dataDir: () => dataDir,
   findZcodeExecutable: () => findZcodeExecutable,
@@ -109947,7 +109969,7 @@ __export(launch_exports, {
 });
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import fs3 from "node:fs";
+import fs4 from "node:fs";
 import os from "node:os";
 import path from "node:path";
 function dataDir() {
@@ -109956,7 +109978,7 @@ function dataDir() {
     return override;
   const root = path.join(os.homedir(), ".zcode", "cli", "plugins", "data");
   const pluginScoped = path.join(root, "zcode-beautify@zcode-beautify");
-  if (fs3.existsSync(pluginScoped))
+  if (fs4.existsSync(pluginScoped))
     return pluginScoped;
   return path.join(root, "zcode-beautify");
 }
@@ -109965,19 +109987,24 @@ function configFile() {
 }
 function loadConfig() {
   try {
-    return JSON.parse(fs3.readFileSync(configFile(), "utf8"));
+    return JSON.parse(fs4.readFileSync(configFile(), "utf8"));
   } catch {
     return {};
   }
 }
+function atomicWriteJson(file, data) {
+  const tmp = `${file}.tmp`;
+  fs4.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs4.renameSync(tmp, file);
+}
 function saveConfig(config) {
-  fs3.mkdirSync(dataDir(), { recursive: true });
-  fs3.writeFileSync(configFile(), JSON.stringify(config, null, 2));
+  fs4.mkdirSync(dataDir(), { recursive: true });
+  atomicWriteJson(configFile(), config);
 }
 function findZcodeExecutable() {
   return ZCODE_EXE_CANDIDATES.map((p2) => p2).find((p2) => {
     try {
-      return fs3.statSync(p2).isFile();
+      return fs4.statSync(p2).isFile();
     } catch {
       return false;
     }
@@ -110024,7 +110051,7 @@ if ($found) { $found[0] }
     if (!found)
       return void 0;
     try {
-      return fs3.statSync(found).isFile() ? found : void 0;
+      return fs4.statSync(found).isFile() ? found : void 0;
     } catch {
       return void 0;
     }
@@ -110137,7 +110164,7 @@ __export(session_exports, {
   reapplyStored: () => reapplyStored,
   resetAppearance: () => resetAppearance
 });
-import fs4 from "node:fs";
+import fs5 from "node:fs";
 import path2 from "node:path";
 async function reapplyStored() {
   const config = mergedConfig();
@@ -110145,7 +110172,7 @@ async function reapplyStored() {
 }
 async function applyWallpaper(imagePath, opts) {
   const abs = path2.resolve(imagePath);
-  if (!fs4.existsSync(abs))
+  if (!fs5.existsSync(abs))
     throw new Error(`Image not found: ${abs}`);
   if (/\.webp$/i.test(abs)) {
     throw new Error("WebP is not supported by the local decoder \u2014 re-export the image as JPG or PNG and import again.");
@@ -110164,11 +110191,11 @@ async function applyWallpaper(imagePath, opts) {
     overlayColor: opts.overlayColor ?? stored.overlayColor ?? DEFAULT_CONFIG.overlayColor,
     overlayStrength: opts.overlayStrength ?? stored.overlayStrength ?? DEFAULT_CONFIG.overlayStrength
   };
-  fs4.mkdirSync(dataDir(), { recursive: true });
+  fs5.mkdirSync(dataDir(), { recursive: true });
   const dest = path2.join(dataDir(), "wallpaper" + path2.extname(abs).toLowerCase());
   if (dest !== abs)
-    fs4.copyFileSync(abs, dest);
-  const assets = await loadWallpaper(dest);
+    fs5.copyFileSync(abs, dest);
+  const assets = await loadWallpaperCached(dest);
   const payload = buildPayload(config, assets);
   saveConfig({ ...config, wallpaperPath: dest });
   const windows = await applyToZCode(config, payload);
@@ -110200,8 +110227,8 @@ async function resetAppearance(port) {
 }
 async function buildPayloadFromConfig(config) {
   let assets;
-  if (config.wallpaperPath && fs4.existsSync(config.wallpaperPath)) {
-    assets = await loadWallpaper(config.wallpaperPath);
+  if (config.wallpaperPath && fs5.existsSync(config.wallpaperPath)) {
+    assets = await loadWallpaperCached(config.wallpaperPath);
   }
   return buildPayload(config, assets);
 }
@@ -110213,12 +110240,13 @@ var init_session = __esm({
   "dist/core/session.js"() {
     "use strict";
     init_inject();
+    init_monet();
     init_launch();
   }
 });
 
 // dist/core/autostart.js
-import fs5 from "node:fs";
+import fs6 from "node:fs";
 import os2 from "node:os";
 import path3 from "node:path";
 function startupDir() {
@@ -110244,7 +110272,7 @@ function autostartEntryPath() {
 function cliEntryPath() {
   const entry = process.argv[1];
   try {
-    return fs5.realpathSync(entry);
+    return fs6.realpathSync(entry);
   } catch {
     return path3.resolve(entry ?? "");
   }
@@ -110316,23 +110344,23 @@ function getAutostartStatus() {
   if (!entryPath) {
     return { platform, supported: false, installed: false, note: `autostart is not implemented for ${platform}` };
   }
-  return { platform, supported: true, installed: fs5.existsSync(entryPath), entryPath };
+  return { platform, supported: true, installed: fs6.existsSync(entryPath), entryPath };
 }
 function installAutostart(spec) {
   const entryPath = autostartEntryPath();
   if (!entryPath)
     return getAutostartStatus();
   const script = process.platform === "win32" ? windowsScript(spec) : process.platform === "darwin" ? macosScript(spec) : linuxScript(spec);
-  fs5.mkdirSync(path3.dirname(entryPath), { recursive: true });
-  fs5.writeFileSync(autostartShimPath(), SHIM_SOURCE);
-  fs5.writeFileSync(entryPath, script);
+  fs6.mkdirSync(path3.dirname(entryPath), { recursive: true });
+  fs6.writeFileSync(autostartShimPath(), SHIM_SOURCE);
+  fs6.writeFileSync(entryPath, script);
   return getAutostartStatus();
 }
 function uninstallAutostart() {
   const entryPath = autostartEntryPath();
   if (!entryPath)
     return getAutostartStatus();
-  fs5.rmSync(entryPath, { force: true });
+  fs6.rmSync(entryPath, { force: true });
   return getAutostartStatus();
 }
 var AUTOSTART_ID, AUTOSTART_LABEL, SHIM_SOURCE;
@@ -110380,7 +110408,7 @@ child.unref();
 });
 
 // dist/core/recovery.js
-import fs6 from "node:fs";
+import fs7 from "node:fs";
 import path4 from "node:path";
 function normalizeMode(value) {
   return typeof value === "string" && RECOVERY_MODES.includes(value) ? value : void 0;
@@ -110390,15 +110418,15 @@ function recoveryFile() {
 }
 function loadRecovery() {
   try {
-    const raw = JSON.parse(fs6.readFileSync(recoveryFile(), "utf8"));
+    const raw = JSON.parse(fs7.readFileSync(recoveryFile(), "utf8"));
     return { mode: normalizeMode(raw.mode) ?? DEFAULT_RECOVERY_MODE, updatedAt: raw.updatedAt };
   } catch {
     return { mode: DEFAULT_RECOVERY_MODE };
   }
 }
 function saveRecovery(config) {
-  fs6.mkdirSync(dataDir(), { recursive: true });
-  fs6.writeFileSync(recoveryFile(), JSON.stringify(config, null, 2));
+  fs7.mkdirSync(dataDir(), { recursive: true });
+  atomicWriteJson(recoveryFile(), config);
 }
 function setRecoveryMode(mode) {
   const next = { mode, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
@@ -110424,6 +110452,43 @@ var init_recovery = __esm({
     init_autostart();
     RECOVERY_MODES = ["off", "on-start", "always"];
     DEFAULT_RECOVERY_MODE = "on-start";
+  }
+});
+
+// dist/panel/colorUtil.js
+function hsvToHex(h, s2, v) {
+  var i2 = Math.floor(h / 60) % 6, f2 = h / 60 - Math.floor(h / 60);
+  var p2 = v * (1 - s2), q = v * (1 - f2 * s2), t2 = v * (1 - (1 - f2) * s2);
+  var rgb = [[v, t2, p2], [q, v, p2], [p2, v, t2], [p2, q, v], [t2, p2, v], [v, p2, q]][i2];
+  return "#" + rgb.map(function(c3) {
+    return ("0" + Math.round(c3 * 255).toString(16)).slice(-2);
+  }).join("").toUpperCase();
+}
+function hexToRgb(hex) {
+  var n2 = parseInt(hex.slice(1), 16);
+  return [n2 >> 16 & 255, n2 >> 8 & 255, n2 & 255];
+}
+function rgbToHsv2(r2, g, b) {
+  r2 /= 255;
+  g /= 255;
+  b /= 255;
+  var max = Math.max(r2, g, b), min = Math.min(r2, g, b), d = max - min;
+  var h = 0;
+  if (d > 0) {
+    if (max === r2)
+      h = 60 * ((g - b) / d % 6);
+    else if (max === g)
+      h = 60 * ((b - r2) / d + 2);
+    else
+      h = 60 * ((r2 - g) / d + 4);
+  }
+  if (h < 0)
+    h += 360;
+  return [h, max === 0 ? 0 : d / max, max];
+}
+var init_colorUtil = __esm({
+  "dist/panel/colorUtil.js"() {
+    "use strict";
   }
 });
 
@@ -110580,7 +110645,8 @@ function buildPanelScript(apiPort, token) {
     '      <button class="zb-btn" id="zb-overlay" title="\u9009\u4E00\u4E2A\u989C\u8272\u53E0\u52A0\u5230\u58C1\u7EB8\u4E0A;\u8C03\u8272\u677F\u91CC\u53EF\u91CD\u7F6E\u6216\u5173\u95ED,\u53F3\u952E\u6309\u94AE\u76F4\u63A5\u53D6\u6D88\u53E0\u52A0">\u53E0\u52A0\u989C\u8272</button>' +
     '      <button class="zb-btn" id="zb-reset" title="\u79FB\u9664\u58C1\u7EB8\u4E0E\u914D\u8272,\u8FD8\u539F ZCode \u9ED8\u8BA4\u5916\u89C2(\u58C1\u7EB8\u4F1A\u88AB\u8BB0\u4F4F,\u53EF\u518D\u6B21\u6062\u590D)">\u8FD8\u539F\u9ED8\u8BA4\u5916\u89C2</button>' +
     '    </div>' +
-    '    <div class="zb-row" style="border-top:1px solid rgba(255,255,255,.1);padding-top:8px">' +
+    // \u5206\u9694\u7EBF\u5FC5\u987B\u7528\u4E3B\u9898\u53D8\u91CF:\u65E9\u524D\u5199\u6B7B\u7684 rgba(255,255,255,.1) \u5728\u6D45\u8272\u4E3B\u9898\u4E0B\u4E0D\u53EF\u89C1\u3002
+    '    <div class="zb-row" style="border-top:1px solid var(--zb-line-soft);padding-top:8px">' +
     '      <label title="ZCode \u6BCF\u6B21\u91CD\u542F\u90FD\u4F1A\u4E22\u6389\u58C1\u7EB8\u548C\u914D\u8272,\u8FD9\u91CC\u51B3\u5B9A\u7531\u8C01\u6765\u628A\u5B83\u4EEC\u6062\u590D\u56DE\u6765"><span>\u81EA\u52A8\u6062\u590D</span></label>' +
     '      <select id="zb-recovery">' +
     '        <option value="off">\u5173\u95ED</option>' +
@@ -110819,11 +110885,16 @@ function buildPanelScript(apiPort, token) {
       var scale = Math.min(1, MAXP / Math.max(img.naturalWidth, img.naturalHeight));
       var w = Math.max(1, Math.round(img.naturalWidth * scale));
       var h = Math.max(1, Math.round(img.naturalHeight * scale));
-      var canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      status('\u5927\u56FE\u5DF2\u538B\u7F29,\u5E94\u7528\u4E2D\u2026');
+    var canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    // JPEG \u6CA1\u6709 alpha \u901A\u9053,canvas \u672A\u586B\u5145\u7684\u50CF\u7D20\u6309\u900F\u660E\u9ED1\u7F16\u7801\u6210\u9ED1\u8272:\u5E26\u900F\u660E\u7684
+    // PNG \u5927\u56FE(\u63D2\u753B\u3001\u62A0\u56FE)\u5BFC\u5165\u540E\u4F1A\u6574\u4F53\u57AB\u4E0A\u9ED1\u5E95,\u6240\u4EE5\u5148\u94FA\u767D\u5E95\u518D\u753B\u56FE\u3002
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    status('\u5927\u56FE\u5DF2\u538B\u7F29,\u5E94\u7528\u4E2D\u2026');
       send(canvas.toDataURL('image/jpeg', 0.92), (f.name || 'wallpaper').replace(/.[^.]+$/, '') + '.jpg');
     };
     img.onerror = function () { URL.revokeObjectURL(url); status('\u56FE\u7247\u8BFB\u53D6\u5931\u8D25,\u8BF7\u6362\u4E00\u5F20\u8BD5\u8BD5'); };
@@ -110841,32 +110912,12 @@ function buildPanelScript(apiPort, token) {
   var palOn = false;    // false = palette mirrors "no overlay" (readout 0%)
   var palPushTimer = null;
 
-  function hsvToHex(h, s, v) {
-    // f is the fractional position WITHIN the 60\xB0 sector: both floors divide
-    // h by 60. (floor(h) alone made f hugely negative for h \u2265 60 and garbage
-    // bytes for every color whose hue wrapped past the first sector \u2014 the
-    // quick picks looked nothing like their chip.)
-    var i = Math.floor(h / 60) % 6, f = h / 60 - Math.floor(h / 60);
-    var p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
-    var rgb = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i];
-    return '#' + rgb.map(function (c) { return ('0' + Math.round(c * 255).toString(16)).slice(-2); }).join('').toUpperCase();
-  }
-  function hexToRgb(hex) {
-    var n = parseInt(hex.slice(1), 16);
-    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-  }
-  function rgbToHsv(r, g, b) {
-    r /= 255; g /= 255; b /= 255;
-    var max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
-    var h = 0;
-    if (d > 0) {
-      if (max === r) h = 60 * (((g - b) / d) % 6);
-      else if (max === g) h = 60 * ((b - r) / d + 2);
-      else h = 60 * ((r - g) / d + 4);
-    }
-    if (h < 0) h += 360;
-    return [h, max === 0 ? 0 : d / max, max];
-  }
+  // \u989C\u8272\u6362\u7B97\u903B\u8F91\u5728 src/panel/colorUtil.ts \u91CC\u7EF4\u62A4\u5E76\u53EF\u5355\u6D4B,\u8FD9\u91CC\u6309\u6E90\u7801\u5185\u8054\u3002
+  // \u4E09\u4E2A\u51FD\u6570\u5FC5\u987B\u4FDD\u6301\u96F6\u5916\u90E8\u5F15\u7528(\u89C1 colorUtil.ts \u9876\u90E8\u8BF4\u660E),\u5426\u5219 toString()
+  // \u5185\u8054\u51FA\u6765\u7684\u526F\u672C\u5728\u9762\u677F\u91CC\u4F1A\u56E0\u7F3A\u4F9D\u8D56\u800C\u5D29\u3002
+  var hsvToHex = ${hsvToHex.toString()};
+  var hexToRgb = ${hexToRgb.toString()};
+  var rgbToHsv = ${rgbToHsv2.toString()};
   function palApply(push) {
     var hex = hsvToHex(palH, palS, palV);
     $('zb-sv').style.backgroundColor = 'hsl(' + Math.round(palH) + ',100%,50%)';
@@ -111003,13 +111054,10 @@ function buildPanelScript(apiPort, token) {
 
   $('zb-reset').addEventListener('click', function () {
     var mode = this.getAttribute('data-mode') || 'reset';
+    // localStorage \u7684\u6E05\u7406\u7531 serve \u7AEF\u7684 reset \u811A\u672C\u7EDF\u4E00\u8D1F\u8D23(\u542B CLI/MCP \u8DEF\u5F84),
+    // \u9762\u677F\u4E0D\u518D\u81EA\u5DF1\u52A8\u624B \u2014\u2014 \u4E24\u5904\u5404\u6E05\u4E00\u904D\u8FDF\u65E9\u4F1A\u6F02\u79FB\u3002
     post(mode === 'restore' ? '/api/restore' : '/api/reset', {}, function () {
-      if (mode === 'reset') {
-        try { localStorage.removeItem('zcode-beautify:css'); localStorage.removeItem('zcode-beautify:wallpaper'); } catch (e) {}
-        status('\u5DF2\u8FD8\u539F\u9ED8\u8BA4\u5916\u89C2');
-      } else {
-        status('\u5DF2\u6062\u590D\u4F60\u7684\u58C1\u7EB8');
-      }
+      status(mode === 'restore' ? '\u5DF2\u6062\u590D\u4F60\u7684\u58C1\u7EB8' : '\u5DF2\u8FD8\u539F\u9ED8\u8BA4\u5916\u89C2');
       refresh();
     });
   });
@@ -111137,6 +111185,7 @@ var PANEL_ROOT_ID;
 var init_panelScript = __esm({
   "dist/panel/panelScript.js"() {
     "use strict";
+    init_colorUtil();
     PANEL_ROOT_ID = "zcode-beautify-panel-root";
   }
 });
@@ -111145,22 +111194,17 @@ var init_panelScript = __esm({
 var server_exports = {};
 __export(server_exports, {
   existingServePid: () => existingServePid,
+  sanitize: () => sanitize,
   startServe: () => startServe
 });
 import http from "node:http";
-import fs7 from "node:fs";
+import fs8 from "node:fs";
 import path5 from "node:path";
 import { randomBytes } from "node:crypto";
 async function getAssets(wallpaperPath) {
-  if (!wallpaperPath || !fs7.existsSync(wallpaperPath))
+  if (!wallpaperPath || !fs8.existsSync(wallpaperPath))
     return void 0;
-  const mtimeMs = fs7.statSync(wallpaperPath).mtimeMs;
-  if (cachedAssets?.file === wallpaperPath && cachedAssets.mtimeMs === mtimeMs) {
-    return cachedAssets.assets;
-  }
-  const assets = await loadWallpaper(wallpaperPath);
-  cachedAssets = { file: wallpaperPath, mtimeMs, assets };
-  return assets;
+  return loadWallpaperCached(wallpaperPath);
 }
 function currentConfig() {
   return { ...DEFAULT_CONFIG, ...loadConfig() };
@@ -111169,7 +111213,7 @@ function backupFile() {
   return path5.join(dataDir(), "config.backup.json");
 }
 function hasBackup() {
-  return fs7.existsSync(backupFile());
+  return fs8.existsSync(backupFile());
 }
 function publicConfig(config) {
   return {
@@ -111181,7 +111225,7 @@ function publicConfig(config) {
     transparency: config.transparency,
     overlayColor: config.overlayColor ?? "",
     overlayStrength: config.overlayStrength,
-    wallpaperSet: Boolean(config.wallpaperPath && fs7.existsSync(config.wallpaperPath)),
+    wallpaperSet: Boolean(config.wallpaperPath && fs8.existsSync(config.wallpaperPath)),
     hasBackup: hasBackup(),
     cdpPort: config.port
   };
@@ -111409,10 +111453,11 @@ async function startServe(opts) {
           throw new Error(`image too large (max ${MAX_WALLPAPER_BYTES / 1024 / 1024} MB)`);
         }
         const config = runtimeConfig();
-        fs7.mkdirSync(dataDir(), { recursive: true });
+        fs8.mkdirSync(dataDir(), { recursive: true });
         const dest = path5.join(dataDir(), "wallpaper" + IMAGE_EXT[m[1]]);
-        fs7.writeFileSync(dest, bytes);
-        cachedAssets = { file: dest, mtimeMs: fs7.statSync(dest).mtimeMs, assets: await loadWallpaper(dest) };
+        fs8.writeFileSync(dest, bytes);
+        invalidateAssetCache();
+        await loadWallpaperCached(dest);
         saveConfig(persisted({ ...config, wallpaperPath: dest }));
         const windows = await pushConfigToSessions({ ...config, wallpaperPath: dest }).catch(() => 0);
         sendJson(res, 200, { ok: true, windows, ...publicConfig({ ...config, wallpaperPath: dest }) });
@@ -111420,9 +111465,9 @@ async function startServe(opts) {
       }
       if (req.method === "POST" && url.pathname === "/api/reset") {
         const stored = loadConfig();
-        if (stored.wallpaperPath && fs7.existsSync(stored.wallpaperPath)) {
-          fs7.mkdirSync(dataDir(), { recursive: true });
-          fs7.writeFileSync(backupFile(), JSON.stringify(stored));
+        if (stored.wallpaperPath && fs8.existsSync(stored.wallpaperPath)) {
+          fs8.mkdirSync(dataDir(), { recursive: true });
+          fs8.writeFileSync(backupFile(), JSON.stringify(stored));
         }
         for (const [id, session] of held) {
           try {
@@ -111438,14 +111483,14 @@ async function startServe(opts) {
           }
         }
         saveConfig({ ...stored, wallpaperPath: void 0 });
-        cachedAssets = void 0;
+        invalidateAssetCache();
         sendJson(res, 200, { ok: true, hasBackup: true });
         return;
       }
       if (req.method === "POST" && url.pathname === "/api/restore") {
         let saved;
         try {
-          saved = JSON.parse(fs7.readFileSync(backupFile(), "utf8"));
+          saved = JSON.parse(fs8.readFileSync(backupFile(), "utf8"));
         } catch {
           throw new Error("no wallpaper backup available");
         }
@@ -111510,7 +111555,7 @@ async function startServe(opts) {
     await poll(runtimeConfig(), apiPort, token);
   }
 }
-var MAX_WALLPAPER_BYTES, MAX_BODY_BYTES, POLL_MS, runtimeState, nextProcessProbe, cachedAssets, held, IMAGE_EXT;
+var MAX_WALLPAPER_BYTES, MAX_BODY_BYTES, POLL_MS, runtimeState, nextProcessProbe, held, IMAGE_EXT;
 var init_server = __esm({
   "dist/core/server.js"() {
     "use strict";
@@ -111543,7 +111588,7 @@ init_launch();
 init_session();
 init_autostart();
 init_recovery();
-import fs8 from "node:fs";
+import fs9 from "node:fs";
 import path6 from "node:path";
 
 // dist/core/launchers.js
@@ -111732,10 +111777,14 @@ var USAGE = `zcode-beautify <command> [options]
 
 Commands:
   launch [--port N]              Start ZCode with --remote-debugging-port=N
-  apply <image> [options]        Set wallpaper and adapt colors
-    --blur <px>                  Blur the wallpaper (default 0)
-    --dim <0-100>                Darken the wallpaper (default 25)
-    --fit <mode>                 cover | contain | smart (default cover)
+  apply <image> [options]        Set wallpaper and adapt colors; options left
+                                 out keep their current setting
+    --blur <px>                  Wallpaper blur radius
+    --dim <0-100>                Darken the wallpaper
+    --transparency <0-100>       Overall UI translucency (50 = the shipped look)
+    --fit <mode>                 cover | contain | smart
+    --overlay-color <#rrggbb|none>  Blend a color over the wallpaper ("none" clears it)
+    --overlay-strength <1-100>   Overlay tint strength
     --no-monet                   Keep ZCode's original colors
     --port <N>                   CDP port (default 9222)
   colors [--port N] [--blur <px>] [--dim <0-100>] [--transparency <0-100>]
@@ -111755,6 +111804,61 @@ Commands:
 `;
 function autostartSpec(cdpPort, apiPort = 9223) {
   return { nodePath: process.execPath, cliPath: cliEntryPath(), cdpPort, apiPort };
+}
+function parseLookFlags(rest) {
+  const flag = (name) => {
+    const i2 = rest.indexOf(name);
+    return i2 >= 0 && i2 + 1 < rest.length ? rest[i2 + 1] : void 0;
+  };
+  const opts = {};
+  let error;
+  const num = (name, min, max) => {
+    const raw = flag(name);
+    if (raw === void 0)
+      return void 0;
+    const n2 = Number(raw);
+    if (!Number.isFinite(n2) || n2 < min || n2 > max) {
+      error ??= `Invalid ${name} "${raw}". Use a number from ${min} to ${max}.`;
+      return void 0;
+    }
+    return n2;
+  };
+  const blur = num("--blur", 0, 100);
+  if (blur !== void 0)
+    opts.blur = blur;
+  const dim = num("--dim", 0, 100);
+  if (dim !== void 0)
+    opts.dim = dim;
+  const transparency = num("--transparency", 0, 100);
+  if (transparency !== void 0)
+    opts.transparency = transparency;
+  const fit = flag("--fit");
+  if (fit !== void 0) {
+    if (fit === "cover" || fit === "contain" || fit === "smart")
+      opts.fit = fit;
+    else
+      error ??= `Invalid --fit "${fit}". Use one of: cover, contain, smart.`;
+  }
+  const rawOverlay = flag("--overlay-color");
+  if (rawOverlay !== void 0) {
+    if (rawOverlay === "none")
+      opts.overlayColor = "";
+    else if (/^#[0-9a-fA-F]{6}$/.test(rawOverlay))
+      opts.overlayColor = rawOverlay;
+    else
+      error ??= `Invalid --overlay-color "${rawOverlay}". Use #rrggbb or "none".`;
+  }
+  const rawStrength = flag("--overlay-strength");
+  if (rawStrength !== void 0) {
+    const n2 = Number(rawStrength);
+    if (!Number.isFinite(n2) || n2 < 1 || n2 > 100) {
+      error ??= `Invalid --overlay-strength "${rawStrength}". Use a number from 1 to 100 (0% means "no overlay" \u2014 clear it with --overlay-color none instead).`;
+    } else
+      opts.overlayStrength = n2;
+  }
+  if (rest.includes("--no-monet"))
+    opts.monet = false;
+  return { opts, error };
 }
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
@@ -111780,7 +111884,15 @@ Quit ZCode completely (including any tray icon), then run \`zcode-beautify launc
         break;
       }
       case "apply": {
-        const valueFlags = /* @__PURE__ */ new Set(["--blur", "--dim", "--fit", "--port"]);
+        const valueFlags = /* @__PURE__ */ new Set([
+          "--blur",
+          "--dim",
+          "--fit",
+          "--port",
+          "--transparency",
+          "--overlay-color",
+          "--overlay-strength"
+        ]);
         let image2;
         for (let i2 = 0; i2 < rest.length; i2++) {
           if (valueFlags.has(rest[i2])) {
@@ -111792,80 +111904,30 @@ Quit ZCode completely (including any tray icon), then run \`zcode-beautify launc
           image2 = rest[i2];
           break;
         }
-        const fit = flag("--fit");
-        if (fit && !["cover", "contain", "smart"].includes(fit)) {
-          console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
-          process.exitCode = 1;
-          return;
-        }
         if (!image2) {
           console.error(USAGE);
           process.exitCode = 1;
           return;
         }
-        const { windows } = await applyWallpaper(image2, {
-          port,
-          blur: Number(flag("--blur") ?? 0),
-          dim: Number(flag("--dim") ?? 25),
-          monet: !has("--no-monet"),
-          fit
-        });
+        const { opts, error } = parseLookFlags(rest);
+        if (error) {
+          console.error(error);
+          process.exitCode = 1;
+          return;
+        }
+        const { windows } = await applyWallpaper(image2, { port, ...opts });
         console.log(`Applied wallpaper + theme to ${windows} window(s).`);
         break;
       }
       case "colors": {
-        const rawTransparency = flag("--transparency");
-        let transparency;
-        if (rawTransparency !== void 0) {
-          transparency = Number(rawTransparency);
-          if (!Number.isFinite(transparency) || transparency < 0 || transparency > 100) {
-            console.error(`Invalid --transparency "${rawTransparency}". Use a number from 0 to 100 (50 = the shipped look).`);
-            process.exitCode = 1;
-            return;
-          }
-        }
-        const rawBlur = flag("--blur");
-        const rawDim = flag("--dim");
-        const rawOverlay = flag("--overlay-color");
-        let overlayColor;
-        if (rawOverlay !== void 0) {
-          if (rawOverlay === "none")
-            overlayColor = "";
-          else if (/^#[0-9a-fA-F]{6}$/.test(rawOverlay))
-            overlayColor = rawOverlay;
-          else {
-            console.error(`Invalid --overlay-color "${rawOverlay}". Use #rrggbb or "none".`);
-            process.exitCode = 1;
-            return;
-          }
-        }
-        const rawStrength = flag("--overlay-strength");
-        let overlayStrength;
-        if (rawStrength !== void 0) {
-          overlayStrength = Number(rawStrength);
-          if (!Number.isFinite(overlayStrength) || overlayStrength < 1 || overlayStrength > 100) {
-            console.error(`Invalid --overlay-strength "${rawStrength}". Use a number from 1 to 100 (0% means "no overlay" \u2014 clear it with --overlay-color none instead).`);
-            process.exitCode = 1;
-            return;
-          }
-        }
-        const fit = flag("--fit");
-        if (fit && !["cover", "contain", "smart"].includes(fit)) {
-          console.error(`Invalid --fit "${fit}". Use one of: cover, contain, smart.`);
+        const { opts, error } = parseLookFlags(rest);
+        if (error) {
+          console.error(error);
           process.exitCode = 1;
           return;
         }
         const { applyColorsOnly: applyColorsOnly2 } = await Promise.resolve().then(() => (init_session(), session_exports));
-        const windows = await applyColorsOnly2({
-          port,
-          transparency,
-          blur: rawBlur !== void 0 ? Number(rawBlur) : void 0,
-          dim: rawDim !== void 0 ? Number(rawDim) : void 0,
-          monet: has("--no-monet") ? false : void 0,
-          fit,
-          overlayColor,
-          overlayStrength
-        });
+        const windows = await applyColorsOnly2({ port, ...opts });
         console.log(`Re-applied theme to ${windows} window(s).`);
         break;
       }
@@ -111985,12 +112047,12 @@ async function startServeDetached(cdpPort, apiPort) {
   if (already !== void 0) {
     throw new Error(`a beautify service is already running on http://127.0.0.1:${apiPort} (pid ${already}) \u2014 open its panel, or stop that process first`);
   }
-  fs8.mkdirSync(dataDir(), { recursive: true });
+  fs9.mkdirSync(dataDir(), { recursive: true });
   const logFile = path6.join(dataDir(), "serve.log");
-  const out = fs8.openSync(logFile, "a");
+  const out = fs9.openSync(logFile, "a");
   const child = spawn2(process.execPath, [process.argv[1], "serve", "--port", String(cdpPort), "--api-port", String(apiPort)], { detached: true, stdio: ["ignore", out, out], windowsHide: true });
   child.unref();
-  fs8.closeSync(out);
+  fs9.closeSync(out);
   for (let i2 = 0; i2 < 20; i2++) {
     await new Promise((r2) => setTimeout(r2, 500));
     try {

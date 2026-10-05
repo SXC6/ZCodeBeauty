@@ -16,7 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { dataDir } from "./launch.js";
+import { atomicWriteJson, dataDir } from "./launch.js";
 import {
   getAutostartStatus,
   installAutostart,
@@ -57,7 +57,7 @@ export function loadRecovery(): RecoveryConfig {
 
 export function saveRecovery(config: RecoveryConfig): void {
   fs.mkdirSync(dataDir(), { recursive: true });
-  fs.writeFileSync(recoveryFile(), JSON.stringify(config, null, 2));
+  atomicWriteJson(recoveryFile(), config);
 }
 
 export function setRecoveryMode(mode: RecoveryMode): RecoveryConfig {

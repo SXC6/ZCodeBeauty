@@ -4,7 +4,7 @@
  */
 
 import { CdpConnection, injectIntoTarget, listTargets, pickRendererTargets, buildResetScript } from "./cdp.js";
-import { loadWallpaper, type WallpaperAssets } from "./monet.js";
+import type { WallpaperAssets } from "./monet.js";
 import { buildVariableOverrides, buildTransparencyOverrides } from "./tokens.js";
 
 export type WallpaperFit = "cover" | "contain" | "smart";
@@ -53,7 +53,7 @@ export interface BuiltPayload {
 }
 
 /** Coerces a stored strength to a usable percent; junk falls back to the default. */
-function normalizeStrength(value: unknown): number {
+export function normalizeStrength(value: unknown): number {
   const n = typeof value === "number" && Number.isFinite(value) ? Math.round(value) : DEFAULT_OVERLAY_STRENGTH;
   return Math.min(100, Math.max(1, n));
 }
@@ -145,7 +145,11 @@ export function buildPayload(config: BeautifyConfig, assets?: WallpaperAssets): 
   const focusY = config.fit === "smart" ? (assets?.focus.y ?? 0.5) : 0.5;
   const position = `${Math.round(focusX * 100)}% ${Math.round(focusY * 100)}%`;
 
-  parts.push(pageTransparentCss());
+  // 透明化只在真的有壁纸可看时才有意义:无壁纸(reset 之后跑 refresh_theme
+  // 是典型路径)还推它,得到的是一扇后面什么都没有的全透明窗。
+  if (assets) {
+    parts.push(pageTransparentCss());
+  }
   parts.push(backdropLayerCss());
   if (config.wallpaperVisible) {
     parts.push(wallpaperLayerCss(config, resolved, position));
@@ -209,6 +213,3 @@ export async function resetZCode(port: number): Promise<number> {
   }
   return count;
 }
-
-/** Re-export so CLI/MCP can load wallpapers without touching monet internals. */
-export { loadWallpaper };

@@ -43,9 +43,21 @@ export function loadConfig(): StoredConfig {
   }
 }
 
+/**
+ * 原子写 JSON:先写同目录临时文件,再 rename 到目标。直接 writeFileSync 覆盖,
+ * 进程在写入中途死掉(升级、断电、强杀)会留下截断的 JSON,loadConfig 会
+ * 静默退回 {} —— wallpaperPath 一丢,整个主题就"消失"了。同一卷上的
+ * rename 是原子操作,目标要么是完整的旧文件,要么是完整的新文件。
+ */
+export function atomicWriteJson(file: string, data: unknown): void {
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, file);
+}
+
 export function saveConfig(config: StoredConfig): void {
   fs.mkdirSync(dataDir(), { recursive: true });
-  fs.writeFileSync(configFile(), JSON.stringify(config, null, 2));
+  atomicWriteJson(configFile(), config);
 }
 
 const ZCODE_EXE_CANDIDATES =

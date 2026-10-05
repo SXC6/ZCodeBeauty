@@ -102,7 +102,7 @@ node dist/cli.js serve --detach
 | 命令 | 用途 |
 |---|---|
 | `launch [--port N]` | 以调试端口启动 ZCode(需先完全退出) |
-| `apply <image> [--blur] [--dim] [--fit] [--no-monet]` | 设壁纸并适配配色(`--fit cover\|contain\|smart`) |
+| `apply <image> [--blur] [--dim] [--fit] [--transparency] [--overlay-color] [--overlay-strength] [--no-monet]` | 设壁纸并适配配色;未传的选项沿用当前设置(`--fit cover\|contain\|smart`) |
 | `colors` | 不换图,重新应用已存主题(`--transparency 0-100` 调界面整体透明度,50 为默认;`--overlay-color <#rrggbb\|none>` 与 `--overlay-strength 1-100` 控制壁纸颜色叠加) |
 | `serve [--detach] [--api-port M]` | 守护模式 + 设置面板 + 本地控制 API(默认 API 端口 9223);`--detach` 使其脱离启动它的终端存活 |
 | `watch` | 无面板守护模式:ZCode 重启后自动重注入 |
@@ -164,6 +164,7 @@ node dist/cli.js serve --detach
 ```bash
 npm install
 npm run build    # 类型检查 + 编译到 dist/
+npm run test     # 单元测试(Node 内置测试器,编译到 dist-test/)
 npm run bundle   # 预构建单文件产物(仓库随附)
 ```
 

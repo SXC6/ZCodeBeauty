@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.7.4
+
+Correctness and robustness pass: the CLI stops clobbering tuned settings, a
+unit-test suite lands, and the reset path closes its escape hatches.
+
+### Fixed
+
+- **`apply` no longer resets blur/dim/monet to their defaults.** It used to
+  pass hardcoded fallbacks (0/25/on) unconditionally, so one CLI apply threw
+  away whatever the panel had tuned. Options left out now keep their current
+  setting — the semantics `colors` and the MCP tools always had. `apply` also
+  gains `--transparency` / `--overlay-color` / `--overlay-strength`, parsed by
+  the same shared routine as `colors`.
+- **Large transparent PNGs no longer turn black.** The panel's in-page
+  downscale encoded straight to JPEG, whose missing alpha channel turned the
+  canvas's transparent black into a solid black background; a white base is
+  painted first now.
+- **A reset can no longer resurrect itself.** The reset script clears the
+  theme's localStorage copy, so the panel's self-heal path cannot re-apply the
+  just-removed theme on the next reload — CLI/MCP resets never cleaned it.
+- **A divider in the panel was invisible in ZCode's light theme** (a
+  hardcoded white border that belonged in the theme-variable set).
+- **`refresh_theme` without a wallpaper no longer yields a fully transparent
+  window**: the transparency CSS is only emitted when there is actually a
+  wallpaper behind the UI.
+
+### Changed
+
+- **Wallpaper assets are cached across calls for the CLI and MCP server too**
+  (keyed by file + mtime; previously serve-only): consecutive `apply_options`
+  tweaks no longer re-decode and re-quantize the image each time (~0.5-1s down
+  to near-zero).
+- **Config/recovery JSON is written atomically** (temp file + rename) — a
+  process killed mid-write could leave a truncated config behind, which
+  silently dropped the wallpaper path.
+
+### Added
+
+- **Unit tests** (`npm test`, zero new dependencies — Node's built-in test
+  runner) covering the color conversions (the 0.7.3 hsvToHex class of bug
+  can no longer land silently), the CSS payload assembly, token/alpha math,
+  focus analysis and the API sanitizer. The panel's color functions now live
+  in `src/panel/colorUtil.ts` and are inlined into the panel script from
+  there, so the tested code is the shipped code.
+
 ## v0.7.3
 
 Palette polish: more presets, a reachable 1% strength, and theme-following

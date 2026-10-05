@@ -106,7 +106,7 @@ You can also just type `/beautify <image path>` in ZCode and let the agent do it
 | Command | Purpose |
 |---|---|
 | `launch [--port N]` | Start ZCode with `--remote-debugging-port` (quit ZCode first) |
-| `apply <image> [--blur] [--dim] [--fit] [--no-monet]` | Set wallpaper + adapt colors (`--fit cover\|contain\|smart`) |
+| `apply <image> [--blur] [--dim] [--fit] [--transparency] [--overlay-color] [--overlay-strength] [--no-monet]` | Set wallpaper + adapt colors; options left out keep their current setting (`--fit cover\|contain\|smart`) |
 | `colors [--port N] [--transparency <0-100>]` | Re-apply the stored theme; `--transparency` tunes overall UI translucency (50 = default); `--overlay-color <#rrggbb\|none>` and `--overlay-strength <1-100>` control the wallpaper tint |
 | `serve [--detach] [--api-port M]` | Watch mode + settings panel + local control API (default API port 9223); `--detach` survives the shell that started it |
 | `watch` | Headless watch mode: re-inject whenever ZCode restarts |
@@ -172,6 +172,7 @@ original file moving or being deleted).
 ```bash
 npm install
 npm run build    # type-check + compile to dist/
+npm run test     # unit tests (Node's built-in runner; compiles to dist-test/)
 npm run bundle   # prebuilt single-file bundles (what the repo ships)
 ```
 

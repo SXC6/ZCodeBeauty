@@ -21,7 +21,7 @@ import {
   pickRendererTargets,
 } from "./cdp.js";
 import { buildPayload, DEFAULT_CONFIG, type BeautifyConfig } from "./inject.js";
-import { loadWallpaper, type WallpaperAssets } from "./monet.js";
+import { invalidateAssetCache, loadWallpaperCached, type WallpaperAssets } from "./monet.js";
 import { buildPanelScript } from "../panel/panelScript.js";
 import { dataDir, isZcodeProcessRunning, loadConfig, relaunchZcode, saveConfig } from "./launch.js";
 import { applyRecoveryMode, loadRecovery, normalizeMode } from "./recovery.js";
@@ -60,18 +60,11 @@ let runtimeState: RuntimeState = { cdpReachable: false, rendererCount: 0, zcodeR
 let nextProcessProbe = 0;
 
 // One decoded image + extracted theme, reused across slider updates so the
-// panel feels instant. Invalidated whenever the wallpaper file changes.
-let cachedAssets: { file: string; mtimeMs: number; assets: WallpaperAssets } | undefined;
-
+// panel feels instant. The cache itself lives in monet.ts (shared with the
+// CLI/MCP paths); this wrapper only keeps the "no wallpaper file" semantics.
 async function getAssets(wallpaperPath?: string): Promise<WallpaperAssets | undefined> {
   if (!wallpaperPath || !fs.existsSync(wallpaperPath)) return undefined;
-  const mtimeMs = fs.statSync(wallpaperPath).mtimeMs;
-  if (cachedAssets?.file === wallpaperPath && cachedAssets.mtimeMs === mtimeMs) {
-    return cachedAssets.assets;
-  }
-  const assets = await loadWallpaper(wallpaperPath);
-  cachedAssets = { file: wallpaperPath, mtimeMs, assets };
-  return assets;
+  return loadWallpaperCached(wallpaperPath);
 }
 
 function currentConfig(): BeautifyConfig {
@@ -102,7 +95,8 @@ function publicConfig(config: BeautifyConfig) {
   };
 }
 
-function sanitize(body: any): Partial<BeautifyConfig> {
+/** 导出仅供单元测试与文档对照;运行时只被本模块的 /api/config 路由调用。 */
+export function sanitize(body: any): Partial<BeautifyConfig> {
   const out: Partial<BeautifyConfig> = {};
   if (typeof body?.blur === "number" && body.blur >= 0 && body.blur <= 100) out.blur = body.blur;
   if (typeof body?.dim === "number" && body.dim >= 0 && body.dim <= 100) out.dim = body.dim;
@@ -395,7 +389,10 @@ export async function startServe(opts: ServeOptions): Promise<void> {
         fs.mkdirSync(dataDir(), { recursive: true });
         const dest = path.join(dataDir(), "wallpaper" + IMAGE_EXT[m[1]]);
         fs.writeFileSync(dest, bytes);
-        cachedAssets = { file: dest, mtimeMs: fs.statSync(dest).mtimeMs, assets: await loadWallpaper(dest) };
+        // 刚覆盖写入的新文件:显式失效再预热,不赌 mtime 粒度。
+        // 随后的 pushConfigToSessions → getAssets 会直接命中这份缓存。
+        invalidateAssetCache();
+        await loadWallpaperCached(dest);
         saveConfig(persisted({ ...config, wallpaperPath: dest }));
         const windows = await pushConfigToSessions({ ...config, wallpaperPath: dest }).catch(() => 0);
         sendJson(res, 200, { ok: true, windows, ...publicConfig({ ...config, wallpaperPath: dest }) });
@@ -425,7 +422,7 @@ export async function startServe(opts: ServeOptions): Promise<void> {
           }
         }
         saveConfig({ ...stored, wallpaperPath: undefined });
-        cachedAssets = undefined;
+        invalidateAssetCache();
         sendJson(res, 200, { ok: true, hasBackup: true });
         return;
       }
