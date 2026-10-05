@@ -24,7 +24,8 @@ INSTALL-FOR-AI.md 是面向你的完整安装手册,请先通读再严格照做)
 4. 问我壁纸主题重启后如何自动恢复(on-start / always / off),并用插件 CLI 设置;
 5. 如果我想要实时设置面板,用 `serve --detach` 启动服务(必须带 --detach,
    不要起第二个);
-6. 最后让我用 /beautify <图片路径> 设一张壁纸,或让我把图片路径发给你。
+6. 最后让我用 /beautify <图片路径> 设一张壁纸,或让我把图片路径发给你
+   (壁纸用 JPG/PNG/GIF/BMP/TIFF,不支持 WebP,别选错格式再返工)。
 全程不得修改 ZCode 的安装文件;遇到问题按 INSTALL-FOR-AI.md 的说明处理,
 不要猜测内部文件格式。
 ```
@@ -47,7 +48,7 @@ If they want to beautify a non-ZCode app or develop their own → read
 
 ## What you are installing
 
-`zcode-beautify` v0.7.4 — a ZCode plugin that adds a wallpaper layer +
+`zcode-beautify` v0.7.5 — a ZCode plugin that adds a wallpaper layer +
 Material Design 3 (Monet) dynamic color to the ZCode desktop client over CDP,
 with a `/beautify` slash command, MCP tools (`set_background`, `apply_options`,
 `refresh_theme`, `reset_appearance`, `beautify_status`, `recovery_status`,

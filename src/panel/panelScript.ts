@@ -164,7 +164,7 @@ export function buildPanelScript(apiPort: number, token: string): string {
     '    </div>' +
     '    <div class="zb-row zb-grid">' +
     '      <button class="zb-btn" id="zb-fit" title="背景填充方式:填满裁剪铺满窗口 / 完整显示不裁剪(模糊垫底)/ 智能适配自动分析画面主体">背景填充: …</button>' +
-    '      <label class="zb-btn" for="zb-file" title="选择一张图片作为背景壁纸,UI 配色随之更新(支持 JPG/PNG/GIF/BMP,不支持 WebP)">更换图片…</label>' +
+    '      <label class="zb-btn" for="zb-file" title="选择一张图片作为背景壁纸,UI 配色随之更新(支持 JPG/PNG/GIF/BMP/TIFF,不支持 WebP)">更换图片…</label>' +
     '      <input type="file" id="zb-file" accept="${ACCEPT_ATTR}" hidden>' +
     '      <button class="zb-btn" id="zb-overlay" title="选一个颜色叠加到壁纸上;调色板里可重置或关闭,右键按钮直接取消叠加">叠加颜色</button>' +
     '      <button class="zb-btn" id="zb-reset" title="移除壁纸与配色,还原 ZCode 默认外观(壁纸会被记住,可再次恢复)">还原默认外观</button>' +
